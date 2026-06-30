@@ -1,0 +1,191 @@
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Data Guard Switchover Checklist
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+1.	Stop GG process 
+/GGhome/GGhome/product/ogg19c/
+./ggsci
+info all
+Stop *
+stop manager
+info all
+
+
+1. Pre-Switchover Checks
+-------------------------
+
+A. Verify Data Guard Broker Configuration (DGMGRL)
+
+    show configuration;
+    show database <primary>;
+    show database ESKADB;
+    show database <standby>;
+    show database INSISDR;
+    show database 'ESAKDB' logxptstatus;
+    show database 'ESAKDB' inconsistentlogxptprops;
+    show database verbose ESAKDB;
+    show database verbose INSISDR;
+    validate database ESAKDB;
+    validate database INSISDR;
+
+B. Check Data Guard Log Gaps and Database Roles (SQL on PRIMARY)
+
+    SELECT status, gap_status 
+      FROM v$archive_dest_status 
+     WHERE dest_id = 2;   -- Should show NO GAP
+
+    SELECT name, log_mode, controlfile_type, open_mode, database_role, switchover_status 
+      FROM gv$database;
+
+2. Tempfiles Consistency on Both Databases (SQL)
+
+    COL name FOR a60
+    SELECT ts#, name, status FROM v$tempfile;
+    -- Run above on both primary and standby. Tempfile count, TS name, and status should match.
+
+    /* Detailed Tempfile and Tablespace Names */
+    SELECT tf.name filename, bytes, ts.name tablespace
+      FROM v$tempfile tf, v$tablespace ts
+     WHERE tf.ts# = ts.ts#;
+ ----------------> add one tempfile to equal count to prod
+ 
+3. Archive Log Sequence Synchronization
+
+    (A) On PRIMARY: Last Sequence Generated
+    
+SELECT thread#, MAX(sequence#) "Last Primary Seq Generated"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+     GROUP BY thread#
+     ORDER BY 1;
+
+    (B) On STANDBY: Last Sequence Received
+    
+SELECT thread#, MAX(sequence#) "Last Standby Seq Received"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+     GROUP BY thread#
+     ORDER BY 1;
+
+    (C) On STANDBY: Last Sequence Applied
+    
+SELECT thread#, MAX(sequence#) "Last Standby Seq Applied"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+       AND val.applied IN ('YES','IN-MEMORY')
+     GROUP BY thread#
+     ORDER BY 1;
+
+4. Check for Offline Datafiles (on Primary)
+
+    SELECT name FROM v$datafile WHERE status = 'OFFLINE';
+    -- Should return no rows! All datafiles must be ONLINE for switchover.
+
+5. Primary Database: Clear Blocking Scheduler Jobs
+
+    -- Step 1: Check and stop the job queue
+    
+  SHOW PARAMETER job_queue_processes;
+  ALTER SYSTEM SET job_queue_processes = 0 SCOPE=BOTH;
+      => Blocks new jobs from starting, resume after switchover!
+
+    -- Step 2: List All Active (Non-SYS) Scheduler Jobs
+    COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+    -- Step 3: Generate Disable Statements
+    SELECT 'EXECUTE DBMS_SCHEDULER.DISABLE(''' || owner || '.' || job_name || ''');'
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+    -- Step 4: Manually Stop Jobs if Needed (example)
+    BEGIN
+      DBMS_SCHEDULER.STOP_JOB('INSIS_CUST.RUN_CHAIN$UDP_CHAI3578');
+    END;
+    /
+
+    *Note: Always record which jobs you disable or stop, and return them to their original states post-switchover.
+
+6. Shutting Down Extra RAC Instances Before Switchover
+
+    -- On Primary:
+    srvctl stop instance -d <db_unique_name> -i <instance2_name>
+      OR
+    sqlplus / as sysdba
+    SHUTDOWN IMMEDIATE;
+
+    -- On Standby:
+    srvctl stop instance -d <db_unique_name> -i <standby_instance2_name>
+      OR
+    sqlplus / as sysdba
+    SHUTDOWN IMMEDIATE;
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Switchover Tuning Steps 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+1. Disable Standby Apply Delay (delaymins)
+
+    -- (If configured, removes log apply lag to speed up switchover)
+    DGMGRL> EDIT DATABASE 'INSISDR' SET PROPERTY delaymins = 0;
+    DGMGRL> SHOW DATABASE 'INSISDR' delaymins;
+
+2. Enable Data Guard Broker Tracing
+
+    DGMGRL> connect sys@ESAKDB
+    DGMGRL> EDIT CONFIGURATION SET PROPERTY traceLevel = 'SUPPORT';
+    DGMGRL> SHOW CONFIGURATION;
+    or
+    DGMGRL> SHOW CONFIGURATION PROPERTY traceLevel;
+
+3. Enable LogArchiveTrace for Deep Diagnostics (especially if RAC)
+
+    DGMGRL> connect sys@ESAKDB
+    DGMGRL> EDIT INSTANCE * ON DATABASE 'ESAKDB' SET PROPERTY LogArchiveTrace = 8191;
+    DGMGRL> EDIT INSTANCE * ON DATABASE 'INSISDR' SET PROPERTY LogArchiveTrace = 8191;
+
+    -- To verify:
+    DGMGRL> SHOW INSTANCE * ON DATABASE 'ESAKDB' LogArchiveTrace;
+    DGMGRL> SHOW INSTANCE * ON DATABASE 'INSISDR' LogArchiveTrace;
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Performing the Switchover
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+1. Connect to DGMGRL (Data Guard Broker CLI):
+
+    $ dgmgrl
+    DGMGRL> connect sys@ESAKDB
+
+2. Initiate the switchover:
+
+    DGMGRL> switchover to INSISDR
+
+    => INSISDR should be the configured standby's broker name.
+    => DGMGRL will coordinate the role switch (Primary <-> Standby).
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Post-Switchover Verification
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Run this on BOTH the new primary and new standby databases:
+
+    SELECT name, log_mode, CONTROLFILE_TYPE, open_mode, database_role, switchover_status
+      FROM gv$database;
+
+-- Verify:
+   * Roles are switched: database_role = 'PRIMARY' on the new primary, 'PHYSICAL STANDBY' on the new standby
+   * open_mode is correct: 'READ WRITE' (primary), 'READ ONLY WITH APPLY' (standby)
+   * log_mode is 'ARCHIVELOG'
+   * switchover_status should be a valid value (not 'NOT ALLOWED')
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Notes:
+
+- Restore any parameters temporarily changed (e.g. job_queue_processes, delaymins, tracing levels)
+- Restart stopped scheduler jobs as required.
+- Re-start any RAC instances you shut down.

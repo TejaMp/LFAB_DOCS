@@ -1,0 +1,60 @@
+#!/bin/bash
+###################################################################
+#Script Name    : GoldenGate_Monitoring.sh
+#Subfiles       :
+#Description    : This script generate GoldenGate Health check Report
+#Author         : Sharang Dhar Dwivedi
+#Email          : Infosys-Ettsak-Infra-Team@lansforsakringar.se
+#
+######################## VERSION ##################################
+# 1.1 - Sharang Dhar Dwivedi - 2019/01/01
+###################################################################
+
+export ORACLE_HOME=/g01/app/grid/oracle19c
+export GG_HOME=/gghome/app/product/ogg19c
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib:$GG_HOME
+export EMAIL_ADDR=Infosys-Ettsak-Infra-Team@lansforsakringar.se
+export SUBJECT_LINE="GoldenGate Health Check Report"
+export MSG="Hi Team, \n\n GoldenGate health report generated. \n
+Kindly have a look into it.\n\nThanks & Regards,\nInfosys Ettsak Infra Team"
+
+# If output exists, it will delete the old file
+if [ -f /tmp/GoldenGate_$HOSTNAME.log ]
+ then
+   rm /tmp/GoldenGate_$HOSTNAME.log
+fi
+
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+echo "**************************************************" >> /tmp/GoldenGate_$HOSTNAME.log
+echo "*****        GoldenGate Health check     *********" >> /tmp/GoldenGate_$HOSTNAME.log
+echo "**************************************************" >> /tmp/GoldenGate_$HOSTNAME.log
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+echo "This report is generated on `date`" >> /tmp/GoldenGate_$HOSTNAME.log
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+
+#Goldengate services status at RAC Cluster level
+#echo "GoldenGate instance running status: " >> /tmp/GoldenGate_$HOSTNAME.log
+#$ORACLE_HOME/bin/agctl status goldengate gg1 >> /tmp/GoldenGate_$HOSTNAME.log
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+
+# Get the GoldenGate running processes
+echo "GoldenGate running processes: " >> /tmp/GoldenGate_$HOSTNAME.log
+$GG_HOME/ggsci << EOF  >> /tmp/GoldenGate_$HOSTNAME.log
+info all
+exit
+EOF
+
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+
+# Check GoldenGate alert log for errors
+echo "GoldenGate ggserr.log output: " >> /tmp/GoldenGate_$HOSTNAME.log
+echo " " >> /tmp/GoldenGate_$HOSTNAME.log
+today=`date +%%Y-%%m-%%d`
+yesterday=`date --date="1 days ago" +%%Y-%%m-%%d`
+grep -Ews "$today|$yesterday" $GG_HOME/ggserr.log -A 2 | grep -v "INFO" | grep -E "$today|$yesterday"| grep -E 'ORA-|OGG-' >> /tmp/GoldenGate_$HOSTNAME.log
+
+
+echo -e $MSG | mailx -s "$SUBJECT_LINE" -a /tmp/GoldenGate_$HOSTNAME.log -c Konsult.Karthikeyan.Saravanan@lansforsakringar.se $EMAIL_ADDR
+

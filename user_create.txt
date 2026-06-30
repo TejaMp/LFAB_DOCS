@@ -1,0 +1,55 @@
+B99JEW
+
+set lines 300 long 9999999 pages 300
+col username for a30
+col account_status for a20
+col profile for a20
+select username,account_status ,profile,expiry_date from dba_users where username like '%99OHO%';
+
+alter user A99OHO identified by Pdhasj6451#2026 account unlock;
+
+CraMint481205#1937
+
+
+create user A99OHO identified by Razen12975321#2025 default tablespace users temporary tablespace temp profile ETTSAK_USERS account unlock;
+
+ask them to connec to standby INSISDR server for this read access.
+
+SELECT OBJECT_NAME,OBJECT_TYPE FROM DBA_OBJECTS WHERE OWNER='A81FBS';
+
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='A81FBS';
+
+CREATE USER "A99OHO" IDENTIFIED BY Friestrom#7652026 DEFAULT TABLESPACE "USERS" TEMPORARY TABLESPACE "TEMP" PROFILE "ETTSAK_USERS";
+GRANT "CONNECT" TO "A99OHO";
+GRANT select any table TO "A99OHO";
+
+GRANT "CREATE SESSION" TO "A99OHO";
+GRANT "DBA" TO "A99OHO";
+GRANT UNLIMITED TABLESPACE TO "A99OHO";
+
+set lines 300 long 9999999 pages 300
+col username for a20
+col account_status for a20
+select username,account_status from dba_users where username like '%946WM%';
+
+
+Please find the new password for your user id A99OHO : TimeTutor567432#2025 
+ 
+Kindly validate the access again and let me know in case of any issues.
+
+######################
+We have created the user as requested in the database.
+
+Please find the password for your user id A99OHO : Razen12975321#2025
+Kindly validate the access and let me know in case of any issues.
+
+Please utilize below connection details for connecting to the database.
+
+Server IP : insis-dr-scan.lfnet.se
+Service name : INSISDR
+Port: 1521
+
+
+
+
+

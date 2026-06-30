@@ -1,0 +1,15 @@
+GG COMMANDS:
+
+INFO ALL
+LAG EXTRACT *
+LAG REPLICAT *
+INFO EXTRACT INEDW, detail
+INFO REPLICAT INRDW, detail
+
+view params inedw
+view params inrdw
+
+info extract inedw, showch
+info replicat inrdw, showch
+
+view report <process>

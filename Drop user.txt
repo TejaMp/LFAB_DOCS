@@ -1,0 +1,31 @@
+expdp dumpfile=schemaname_bkp.dmp logfile=schemaname_bkp.log Directory=DATA_PUMP_DIR schemas=SCHEMANAME
+DBA Update: 
+Mentioned user is not avaible in any of the oracle database, hence closing the task
+set lines 300
+set long 999999
+select dbms_metadata.get_ddl('USER', username) || '/' usercreate from dba_users where username='A99JHN';
+drop user username;
+
+check before dropping a user:
+col username for a20
+col account_status for a15
+col profile for a15
+col expiry_date for a20
+set lines 300
+set long 999999
+select username,ACCOUNT_STATUS,PROFILE,expiry_date FROM DBA_USERS WHERE USERNAME='A99JHN';
+SELECT OBJECT_NAME,OBJECT_TYPE FROM DBA_OBJECTS WHERE OWNER='A99JHN';
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='A99JHN';
+
+drop user username;
+
+drop user username cascade;
+
+select grantee,owner,table_name,privilege from dba_tab_privs where table_name='tablename';
+
+
+select username,ACCOUNT_STATUS,PROFILE,expiry_date FROM DBA_USERS WHERE USERNAME='E812';
+
+SELECT OBJECT_NAME,OBJECT_TYPE FROM DBA_OBJECTS WHERE OWNER='E812';
+
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='E812';

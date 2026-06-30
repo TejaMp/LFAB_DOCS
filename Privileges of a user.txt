@@ -1,0 +1,288 @@
+set heading off
+set pages 0
+set long 9999999
+select dbms_metadata.get_granted_ddl('ROLE_GRANT', user)  
+from dual;
+select dbms_metadata.get_granted_ddl('SYSTEM_GRANT', user)  
+from dual;
+select dbms_metadata.get_granted_ddl('OBJECT_GRANT', user)  
+from dual;
+
+GRANT SELECT ON '||r.owner||'.'||r.table_name||' to ' || grantee
+
+Select 'GRANT SELECT ON SYS.'||r.table_name||' to ' || A81FPX;' From All_Tables Where Owner='SYS';
+
+Select 'GRANT SELECT ON SYS.'||view_name||' TO A81FPX with grant option;' From All_views Where Owner='SYS' and view_name like '%ALL_%';
+
+Select 'REVOKE SELECT ON SYS.'||TABLE_NAME||' FROM A81FPX;' From All_TABLES Where Owner='SYS';
+*******************************************************************************
+This query shows all table-level granted privileges for a user named 'MYUSER':
+*******************************************************************************
+select
+   owner,GRANTEE,
+   table_name,
+   select_priv,
+   insert_priv,
+   delete_priv,
+   update_priv,
+   references_priv,
+   alter_priv,
+   index_priv
+from
+   table_privileges
+where
+   grantee = 'A81FPX'
+order by
+   owner,
+   table_name;
+*******************************************************************************
+This query shows all role privileges for a user:
+*******************************************************************************
+select distinct
+   owner,
+   table_name,
+   privilege
+from
+   dba_role_privs rp,
+   role_tab_privs rtp
+where
+   rp.granted_role = rtp.role
+and
+   rp.grantee = 'A81FPX'
+order by
+   owner,
+   table_name;
+*******************************************************************************
+The following example will display all system and role privileges for a user named MYUSER:
+******************************************************************************
+select
+   privilege
+from
+   sys.dba_sys_privs
+ where
+   grantee = 'A81FPX'
+union
+select
+   privilege
+from
+   dba_role_privs rp
+join
+   role_sys_privs rsp
+on (rp.granted_role = rsp.role)
+ where rp.grantee = 'A81FPX'
+ order by 1;
+ 
+SELECT
+    p.grantee,
+    p.privilege,
+    r.granted_role
+FROM
+    dba_sys_privs p
+    LEFT JOIN dba_role_privs r ON p.grantee = r.grantee
+WHERE
+    p.grantee = 'A81FPX'
+UNION
+SELECT
+    r.grantee,
+    null,
+    r.granted_role
+FROM
+    dba_role_privs r
+WHERE
+    r.grantee = 'A81FPX';
+ 
+select owner,GRANTEE,table_name,select_priv,insert_priv,delete_priv,update_priv from table_privileges where grantee = 'A81FPX' order by owner,table_name;
+
+COMMANDS:
+*********
+SELECT A.GRANTEE, A.GRANTED_ROLE
+FROM dba_role_privs A WHERE  A.GRANTEE IN(SELECT USERNAME FROM DBA_USERS WHERE PROFILE NOT IN('DEFAULT','SYS_Y')) ORDER BY 1;
+SELECT DISTINCT A.GRANTEE, B.PRIVILEGE
+FROM dba_role_privs A, DBA_SYS_PRIVS B WHERE A.GRANTEE=B.GRANTEE AND A.GRANTEE IN(SELECT USERNAME FROM DBA_USERS WHERE PROFILE NOT IN('DEFAULT','SYS_Y')) ORDER BY 1;
+
+SELECT DISTINCT
+    u.username,
+    sp.privilege AS sys_privilege
+FROM
+    dba_users u
+    JOIN dba_profiles p ON u.profile = p.profile
+    LEFT JOIN dba_sys_privs sp ON u.username = sp.grantee
+WHERE
+    p.profile = 'APPL_Y'
+ORDER BY
+    u.username;
+
+SELECT DISTINCT
+    u.username,
+    rp.granted_role AS role
+FROM
+    dba_users u
+    JOIN dba_profiles p ON u.profile = p.profile
+    LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+WHERE
+    p.profile = 'APPL_Y'
+ORDER BY
+    u.username;
+
+SELECT DISTINCT
+    u.username,
+    rp.granted_role AS role
+FROM
+    dba_users u
+    LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+WHERE
+    u.username NOT IN ('SYS', 'SYSTEM')
+ORDER BY
+    u.username;
+
+
+SELECT DISTINCT
+    u.username,
+    sp.privilege AS sys_privilege,
+    rp.granted_role AS role
+FROM
+    dba_users u
+    JOIN dba_profiles p ON u.profile = p.profile
+    LEFT JOIN dba_sys_privs sp ON u.username = sp.grantee
+    LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+WHERE
+    p.profile = 'APPL_Y'
+ORDER BY
+    u.username;
+	
+	
+
+SELECT DISTINCT
+    u.username,
+    sp.privilege AS sys_privilege,
+    rp.granted_role AS role
+FROM
+    dba_users u
+    JOIN dba_profiles p ON u.profile = p.profile
+    LEFT JOIN dba_sys_privs sp ON u.username = sp.grantee
+    LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+WHERE
+    p.profile = 'EXXXI'
+ORDER BY
+    u.username;
+
+SELECT DISTINCT
+    u.username,
+    sp.privilege AS sys_privilege,
+    rp.granted_role AS role
+FROM
+    dba_users u
+    JOIN dba_profiles p ON u.profile = p.profile
+    LEFT JOIN dba_sys_privs sp ON u.username = sp.grantee
+    LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+WHERE
+    p.profile = 'P_SCHEMA'
+ORDER BY
+    u.username;
+
+
+SELECT
+    u.username,
+    sp.privilege AS sys_privilege,
+    rp.granted_role AS role
+FROM
+    dba_users u
+    JOIN dba_profiles p ON u.profile = p.profile
+    LEFT JOIN dba_sys_privs sp ON u.username = sp.grantee
+    LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+WHERE
+    p.profile = 'APPL_Y'
+ORDER BY
+    u.username;
+
+SELECT
+    p.grantee AS username,
+    p.privilege AS sys_privilege,
+    r.granted_role AS role
+FROM
+    dba_sys_privs p
+    LEFT JOIN dba_role_privs r ON p.grantee = r.grantee
+UNION
+SELECT
+    r.grantee AS username,
+    null AS sys_privilege,
+    r.granted_role AS role
+FROM
+    dba_role_privs r;
+
+SELECT
+    p.grantee AS username,
+    p.privilege AS sys_privilege,
+    r.granted_role AS role
+FROM
+    dba_sys_privs p
+    LEFT JOIN dba_role_privs r ON p.grantee = r.grantee
+UNION
+SELECT
+    r.grantee AS username,
+    null AS sys_privilege,
+    r.granted_role AS role
+FROM
+    dba_role_privs r
+GROUP BY
+    r.grantee,
+    r.granted_role,
+    p.grantee,
+    p.privilege;
+
+SELECT
+    p.grantee,
+    p.privilege,
+    r.granted_role
+FROM
+    dba_sys_privs p
+    LEFT JOIN dba_role_privs r ON p.grantee = r.grantee
+WHERE
+    p.grantee = 'A81FPX'
+UNION
+SELECT
+    r.grantee,
+    null,
+    r.granted_role
+FROM
+    dba_role_privs r
+WHERE
+    r.grantee = 'A81FPX';
+	
+SELECT
+    p.grantee AS username,
+    p.privilege AS sys_privilege,
+    r.granted_role AS role
+FROM
+    dba_sys_privs p
+    LEFT JOIN dba_role_privs r ON p.grantee = r.grantee
+UNION
+SELECT
+    r.grantee AS username,
+    null AS sys_privilege,
+    r.granted_role AS role
+FROM
+    dba_role_privs r
+GROUP BY
+    r.grantee,
+    r.granted_role,
+    p.grantee,
+    p.privilege;
+
+
+SQL> select grantee,owner,table_name,grantor,privilege from dba_tab_privs where owner='A81FPX';
+
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='A81FPX';
+
+select * from dba_tab_privs where grantee like '%ETTSAK%';
+
+
+col grantee for a25
+col owner for a20
+col table_name for a25
+col privilege for a10
+col type for a10
+SELECT grantee, owner, table_name, privilege, type
+FROM dba_tab_privs
+WHERE grantee like '%ETTSAK%'
+ORDER BY grantee, owner, table_name, privilege;

@@ -1,0 +1,55 @@
+col os_username for a15
+col dbusername for a25
+col event_timestamp for a30
+col userhost for a42
+col terminal for a15
+col client_program_name for a10
+SELECT
+    event_timestamp,
+    os_username,
+    dbusername,
+    userhost,
+    terminal,
+    client_program_name,
+    action_name,
+    return_code
+FROM
+    unified_audit_trail
+WHERE
+    dbusername = 'ETTSAK_MORNING_REPORT'
+ORDER BY
+    event_timestamp DESC;
+	
+col os_username for a15
+col dbusername for a25
+col event_timestamp for a30
+col userhost for a42
+col terminal for a15
+col client_program_name for a10
+SELECT
+    event_timestamp,
+    os_username,
+    dbusername,
+    userhost,
+    terminal,
+    client_program_name,
+    action_name,
+    return_code
+FROM
+    unified_audit_trail
+WHERE
+    dbusername = 'B818R1'
+    AND return_code != 0
+ORDER BY
+    event_timestamp DESC;
+	
+	
+SELECT resource_name, limit
+FROM dba_profiles
+WHERE profile = (SELECT profile FROM dba_users WHERE username = 'ETTSAK_MORNING_REPORT');
+
+select username,account_status,profile,expiry_date,LOCK_DATE from dba_users WHERE username = 'ETTSAK_MORNING_REPORT';
+
+
+	
+	

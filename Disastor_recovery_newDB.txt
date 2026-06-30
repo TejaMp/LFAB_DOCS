@@ -1,0 +1,8 @@
+redirect change destinatin - +DATA/INSISDR/DATAFILE to +DATA/PRDCLN/DATAFILE:
+
+and optins
+change dbid
+
+Updated ettsak-prod-db-read-access.yml
+
+for updating LIQUIBASE_USER and LIQUIBASE_CC user pas

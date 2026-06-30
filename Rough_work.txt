@@ -1,0 +1,391 @@
+PLANNED:
+==========
+e75lrl3033v - +ARCHIVE being flushed daily - requested to align hourly archive log backup
+
+
+AN1572 - Storage request
+AN1195 - backup restore request
+AN1109 - firewall request
+Requests:
+========
+AN1880 - Agent Loading - check with user support if the user already exists.
+AN1886 - User loading in Non-prod - INSISMED - INSISMAT1 - e75lrl3045v.lfnet.se
+AN1268 - User loading prod
+AN1352 - Bolag addition
+
+#####IMPORTANT
+environment: ${{ parameters.env_name }}
+
+FOR ettsak-deploy-laundry-replica-test PIPELINE + I CHANGED ABOVE IN laundry-pipeline.yml
+
+at line 13 above needs to be present
+##################################
+
+hasattachments:yes GoldenGate Replication Validation
+
+In this context, “user loading” means creating application accounts in the INSIS database for real people at the insurance company (using their BID, name, email, and office) and setting which offices’ data they are allowed to see.
+
+what are real people measn
+the ones taking policies or the employees at that insurance company?
+
+Here, “users” means the people who work with the insurance system (employees, agents, etc.), not the customers/policyholders buying insurance.
+
+AN1572 - Request new disk  - manage storage
+
+grep Huge /proc/meminfo
+sysctl.conf --> check the value in this file
+ 
+ 
+cat /sys/kernel/mm/transparent_hugepage/enabled
+
+Mentioned script has been successfully executed in the database.
+
+ps -eo pid,ppid,user,cmd,%mem,%cpu --sort=-%mem | head -n 11
+
+grep -o 'ID: [0-9]\+' LFCHG1255612_UPDATE_BLOCK_v2_1.log | wc -l
+
+usermod -aG dba c81d2r
+
+Mentioned user has been successfully loaded to the database.
+
+Mentioned user is already loaded into the database
+
+Mentioned office id is successfully added to the bolag.
+
+MENTIONED OFFICE ID IS ALREADY ADDED TO THE BOLAG
+
+Mentioned office access is already not available to the user.
+
+Mentioned bolag is deleted for the user in the database. 
+
+Mentioned agent has been successfully loaded to the database.
+
+Mentioned agent already exists and we are waiting for user to let us know the requirement of this request.
+
+Mentioned user does not exist. Kindly raise a request under article AN1268 to perform the user loading and then re-raise this request for performing the bolag addition
+
+Mentioned user is locked and successfully deactivated in the database.
+
+Mentioned agent already exists with the Agent Number(Bolag No+Säljarnummer) in the database.
+
+Agent removal:
+delete from INSIS_PEOPLE_V10.P_AGENTS where AGENT_NO='2421451';
+
+agent loading changes:
+
+AN1271:
+
+bolag removal:
+col ACCOUNT_ID for 9999999999999999999999999999
+SELECT ACCOUNT_ID FROM INSIS_PEOPLE_V10.P_USER_ACCOUNTS WHERE user_name='B29ACJ';
+
+
+DELETE FROM INSIS_PEOPLE_V10.P_ACCOUNT_OFFICES
+  WHERE account_id = 62400000000000005977 AND OFFICE_ID IN (SELECT OFFICE_ID
+  FROM INSIS_PEOPLE_V10.P_OFFICES
+  WHERE OFFICE_NO = '42');
+
+Mentioned bolag is deleted for the user in the database.
+
+Agent loading:
+SELECT count(*) FROM INSIS_PEOPLE_V10.P_AGENTS WHERE AGENT_NO='$agent_number';
+
+
+ # Execute the Insert/Update SQL query for Agent loading
+
+
+             AGENTQUERY1="INSERT INTO INSIS_CUST.DB_CREATEINSISUSERS(GNAME, FNAME, SNAME, SEX, LANGUAGE, OFFICE_ID, IS_AGENT,AGENT_HD,AGENT_NO,USERMAIL,TELEFON,
+STATUS) Values
+('$first_name','$second_name','$first_name $second_name',3,'SWEDISH','$bolag_number',1,TO_DATE('$joining_date','YYYY-MM-DD'),'$agent_number','$email','$mobile',
+0);"
+
+
+sqlplus A81D2R@ESAKDB
+
+User defined type in column:
+SELECT COLUMN_NAME, DATA_TYPE FROM DBA_TAB_COLUMNS
+WHERE OWNER = 'INSIS_GEN_V10'
+  AND TABLE_NAME = 'POLICY_RENEWAL_LOG';
+ 
+ SELECT TRIGGER_NAME, TRIGGER_TYPE FROM DBA_TRIGGERS
+WHERE TABLE_OWNER = 'INSIS_GEN_V10'
+  AND TABLE_NAME = 'POLICY_RENEWAL_LOG';
+  
+GRANT EXECUTE ON INSIS_GEN_V10.SRVERR TO A81YS9;
+First gave grant select on INSIS_CUST.policy_renewal_log 
+
+SQL> GRANT EXECUTE ON INSIS_GEN_V10.SRVERR TO A81YS9;
+
+Grant succeeded.
+
+grep -o 'ID: [0-9]\+' LFCHG1255612_UPDATE_BLOCK_v2_1.log | wc -l
+
+SELECT * FROM INSIS_PEOPLE_V10.P_AGENTS WHERE AGENT_NO='2421450';
+
+SELECT ACCOUNT_ID FROM INSIS_PEOPLE_V10.P_USER_ACCOUNTS WHERE user_name='B216Z6';
+
+SELECT p_people."NAME", p_agents.*
+FROM insis_cust.p_agents
+JOIN insis_cust.P_PEOPLE ON p_agents.man_id = p_people.man_id
+WHERE agent_no LIKE '%21450';
+
+select * from INSIS_PEOPLE_V10.P_ACCOUNT_OFFICES where ACCOUNT_ID='62400000000000029155' and office_id='3';
+
+Hi Balram,
+ 
+Please find below database access details:
+ 
+Schema name: A81LEK
+Password: Guidenrise#7652025
+ 
+HOST=insis-db-scan.lfnet.se
+PORT=1521
+SERVICE_NAME=ESAKDB
+
+
+session details:
+SELECT
+  SID,
+  SERIAL#,
+  USERNAME,
+  STATUS,
+  OSUSER,
+  MACHINE,
+  PROGRAM,
+  LOGON_TIME
+FROM
+  V$SESSION
+WHERE
+  USERNAME IS NOT NULL;
+  
+all_tables:
+select owner,table_name from all_tables where table_name like '%GEN_ANNEX%';
+
+ SELECT owner, table_name
+FROM dba_tables
+WHERE table_name like '%HS_ANNEX_STATE%';
+
+SELECT owner, synonym_name, table_owner, table_name
+FROM all_synonyms
+WHERE synonym_name like '%ANNEX_STATE%';
+
+SELECT owner, view_name
+FROM all_views
+WHERE view_name = 'GEN_ANNEX';
+
+insis_gen_v10.hs_annex_state; and insis_gen_v10.hst_annex_state;
+
+select * from dba_hist_active_sess_history where blocking_session is not null and sample_time between to_date ('2025-10-06 11:20','YYYY-MM-DD HH24:MI') and to_date ('2025-10-06 11:30','YYYY-MM-DD HH24:MI');
+
+select blocking_session,session_id as blocked_session, count(*) as samples, MIN (sample_time) as  first_seen, MAX (sample_time) as last_seen from dba_hist_active_sess_history where blocking_session is not null and sample_time between to_date ('2025-10-06 11:20','YYYY-MM-DD HH24:MI') and to_date ('2025-10-06 11:30','YYYY-MM-DD HH24:MI') group by blocking_session, session_id order by samples desc;
+
+select blocking_session,count(DISTINCT session_id) as blocked_session, count(*) as samples, MIN (sample_time) as  first_seen, MAX (sample_time) as last_seen from dba_hist_active_sess_history where blocking_session is not null and sample_time between to_date ('2025-10-06 11:20','YYYY-MM-DD HH24:MI') and to_date ('2025-10-06 11:30','YYYY-MM-DD HH24:MI') group by blocking_session order by blocked_session desc;
+
+select session_id, sql_id, program, module, action, event, wait_class, sample_time from dba_hist_active_sess_history where session_id in (9046) and sample_time between to_date ('2025-10-06 11:20','YYYY-MM-DD HH24:MI') and to_date ('2025-10-06 11:30','YYYY-MM-DD HH24:MI') order by sample_time;
+
+select event,count(*) as samples from dba_hist_active_sess_history where sample_time between to_date ('2025-10-06 11:20','YYYY-MM-DD HH24:MI') and to_date ('2025-10-06 11:30','YYYY-MM-DD HH24:MI') group by event order by samples desc;
+
+select * from dba_hist_active_sess_history where session_id = 8041 and sample_time between to_date ('2025-10-06 11:20','YYYY-MM-DD HH24:MI') and to_date ('2025-10-06 11:30','YYYY-MM-DD HH24:MI');
+  
+SET LINES 200
+COL OPNAME FOR A25
+
+SELECT 
+    SID,
+    SERIAL#,
+    SOFAR,
+    TOTALWORK,
+    ROUND((SOFAR/TOTALWORK)*100,2) "%_COMPLETE",
+    OPNAME,
+    TIME_REMAINING
+FROM 
+    V$SESSION_LONGOPS
+WHERE 
+    SOFAR <> TOTALWORK; 
+
+set lines 300 long 9999999 pages 300
+col username for a20
+col account_status for a20
+col profile for a20
+select username,account_status ,profile,expiry_date from dba_users where username like '%DBSNMP%';
+
+LfIns1sAdm
+
+
+stop database
+
+Stop has as root
+
+take backup of both grid home and oracle home
+
+tar -cvf /backup/patches_19.29/ORA_HOME.tar /g01/app/oraInventory /u01/app/oracle/rdbms19c
+
+/g01/app/grid/oracle19c
+
+tar -cvf /backup/patches_19.29/ORA_HOME.tar /g01/app/oraInventory /g01/app/grid/oracle19c
+
+/g01/app/grid/oracle19c/crs/install
+
+./roothas.sh -prepatch
+
+[root@e75lrl2037v install]# ./roothas.sh -prepatch
+Smartmatch is deprecated at /g01/app/grid/oracle19c/crs/install/crsupgrade.pm line 6512.
+Using configuration parameter file: /g01/app/grid/oracle19c/crs/install/crsconfig_params
+The log of current session can be found at:
+  /g01/app/grid/crsdata/e75lrl2037v/crsconfig/hapatch_2025-11-12_06-15-13AM.log
+2025/11/12 06:15:24 CLSRSC-347: Successfully unlock /g01/app/grid/oracle19c
+2025/11/12 06:15:24 CLSRSC-671: Pre-patch steps for patching GI home successfully completed.
+
+applying oracle rdbms patch:
+
+export PATH=$ORACLE_HOME/OPatch:$PATH
+
+opatch apply
+
+startup grid and then database
+
+cd $ORACLE_HOME/OPatch
+
+./datapatch -verbose
+
+SELECT con_id, patch_id, patch_uid, status, action_time, description
+FROM cdb_registry_sqlpatch
+ORDER BY action_time DESC;
+
+cd 
+
+LIQPOC - TEMP
+
+GODOT - INDX
+
+/u01/app/oracle/diag/rdbms/inscdb37/INSCDB37/trace
+
+BECKET(12):ORA-1653: unable to extend table INSIS_CUST.TLOG by 1024 in tablespace INSIS_CUST [BECKET]
+BECKET(12):ORA-1653: unable to extend table INSIS_CUST.TLOG by 1024 in tablespace INSIS_CUST [BECKET]
+BECKET(12):ORA-1653: unable to extend table INSIS_CUST.TLOG by 1024 in tablespace INSIS_CUST [BECKET]
+BECKET(12):ORA-1653: unable to extend table INSIS_CUST.TLOG by 1024 in tablespace INSIS_CUST [BECKET]
+2025-11-12T06:41:42.290806+01:00
+EMP_SRC(9):ORA-1652: unable to extend temp segment by 128 in tablespace TEMP [EMP_SRC]
+
+
+UPGSIT:
+insis-mat-scan.lfnet.se:1521
+SCAN_IP's: 1521
+10.200.37.245
+10.200.37.246
+10.200.37.247
+
+VIP's: 1521
+10.200.37.243
+10.200.37.244
+
+SIT:
+insis-insmat-scan.lfnet.se
+
+SCAN_IP's: 1521
+10.200.37.189
+10.200.37.190
+10.200.37.191
+
+VIP's: 1521
+10.200.37.187
+10.200.37.188
+
+
+select * from INSISHIST.IGBV_BLCPAYINSTRUMENTS where INSTRUMENT_ID IN ('1870467',
+'1870468',
+'1870473',
+'1870476',
+'1870485',
+'1870487',
+'1870491');
+
+
+SELECT * FROM INSIS_GEN_V10.CLAIM_PAYMENTS where PAYMENT_ID IN ('2110505223',
+'2110505224');
+
+SELECT * FROM INSISHIST.IGV_CLAIMPAYMENTS where PAYMENT_ID IN ('2110505223',
+'2110505224');
+
+REM INSERTING into INSISHIST.IGV_CLAIMPAYMENTS
+SET DEFINE OFF;
+Insert into INSISHIST.IGV_CLAIMPAYMENTS (PAYMENT_ID,DOCLAD_ID,CLAIM_ID,REQUEST_ID,BENEF_TYPE,MAN_ID,PAYMENT_NUM,PAYMENT_WAY,PAY_SUM,CURRENCY,INDEM_SUM,EXPENSE_SUM,CORRECT_SUM,REGISTRATION_DATE,USERNAME,BENEF_PERC,NOTES,ATTR1,ATTR2,ATTR3,ATTR4,ATTR5,CLAIM_EXP_SEQ,UPDATED_BY,UPDATED_ON,ATTRC1,ATTRC2,ATTRC3,ATTRC4,ATTRC5,ATTRN1,ATTRN2,ATTRN3,ATTRN4,ATTRN5,ATTRN6,ATTRN7,ATTRN8,ATTRN9,ATTRN10,ATTRD1,ATTRD2,ATTRD3,ATTRD4,ATTRD5, DB_OP_TYPE, SRC_COMMIT_TS, BFR_AFT_IND) values (2110505223,2030508418,20700661611,1,58,6002937433,1,'3',27600,'SEK',27600,0,0,to_date('03-OCT-25','DD-MON-RR'),'B28XEL',100,null,'2040532528',null,null,null,null,null,'B28XEL',to_date('03-OCT-25','DD-MON-RR'),null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,null,null,null,'INSERT',SYSDATE,'AFTER');
+
+Insert into INSISHIST.IGV_CLAIMPAYMENTS (PAYMENT_ID,DOCLAD_ID,CLAIM_ID,REQUEST_ID,BENEF_TYPE,MAN_ID,PAYMENT_NUM,PAYMENT_WAY,PAY_SUM,CURRENCY,INDEM_SUM,EXPENSE_SUM,CORRECT_SUM,REGISTRATION_DATE,USERNAME,BENEF_PERC,NOTES,ATTR1,ATTR2,ATTR3,ATTR4,ATTR5,CLAIM_EXP_SEQ,UPDATED_BY,UPDATED_ON,ATTRC1,ATTRC2,ATTRC3,ATTRC4,ATTRC5,ATTRN1,ATTRN2,ATTRN3,ATTRN4,ATTRN5,ATTRN6,ATTRN7,ATTRN8,ATTRN9,ATTRN10,ATTRD1,ATTRD2,ATTRD3,ATTRD4,ATTRD5, DB_OP_TYPE, SRC_COMMIT_TS, BFR_AFT_IND) values (2110505224,2030508419,20700675947,1,58,6004193030,1,'3',2000,'SEK',2000,0,0,to_date('03-OCT-25','DD-MON-RR'),'B28NKA',100,null,'2177222528',null,null,null,null,null,'B28NKA',to_date('03-OCT-25','DD-MON-RR'),null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,null,null,null,'INSERT',SYSDATE,'AFTER');
+
+SELECT * FROM INSIS_GEN_V10.CLAIM_PAYMENTS_DETAILS where DETAIL_ID IN ('2140568625',
+'2140568624');
+
+
+SELECT * FROM INSIS_GEN_V10.CLAIM_OBJECTS where CLAIM_OBJ_SEQ IN ('2080880084',
+'2080880085',
+'2080880087');
+
+SELECT * FROM INSISHIST.IGV_CLAIMOBJECTS where CLAIM_OBJ_SEQ IN ('2080880084',
+'2080880085',
+'2080880087');
+
+INSERT INTO INSISHIST.IGV_CLAIMOBJECTS (CLAIM_OBJ_SEQ, CLAIM_ID, REQUEST_ID, POLICY_ID, INSR_TYPE, INSURED_OBJ_ID, COVER_TYPE, ANNEX_ID, RISK_TYPE, OBJECT_ID, OBJECT_TYPE, LOSS_TYPE, INJURED_GUILTY_TYPE,
+INJURED_OBJECT_TYPE, INJURED_OBJECT_ID, CLAIM_STATE, INITIAL_RESERV_AMNT, INITIAL_RESERV_CURRENCY, MAN_ID, FIND_DATE, REGISTRATION_DATE,USERNAME,
+CLAIM_STATE_AUX, INITIAL_CSC_AMNT, INITIAL_CSC_CURRENCY, INITIAL_CSC_DIM, RESOLVE_TYPE, PLACE_ID, SUPPL_OBJECT_ID, ITEM_TYPE, ITEM_DESCRIPTION,
+ITEM_PURCHASE_DATE, SYSTEM_NOTES, ATTR1, ATTR2, ATTR3, ATTR4, ATTR5, INJURY_CAUSED_BY, SKIP_EVALUATION, SKIP_CALCULATION, LIABILITY, EX_GRATIA,
+DB_OP_TYPE, SRC_COMMIT_TS, BFR_AFT_IND)
+	select a.*, 'INSERT' as DB_op_type, SYSDATE as src_commit_ts, 'AFTER' as BFR_AFT_IND from		
+		(SELECT  CLAIM_OBJ_SEQ, CLAIM_ID, REQUEST_ID, POLICY_ID, INSR_TYPE, INSURED_OBJ_ID, COVER_TYPE, ANNEX_ID, RISK_TYPE, OBJECT_ID, OBJECT_TYPE, LOSS_TYPE, 		INJURED_GUILTY_TYPE,
+		INJURED_OBJECT_TYPE, INJURED_OBJECT_ID, CLAIM_STATE, INITIAL_RESERV_AMNT, INITIAL_RESERV_CURRENCY, MAN_ID, FIND_DATE, REGISTRATION_DATE,USERNAME,
+		CLAIM_STATE_AUX, INITIAL_CSC_AMNT, INITIAL_CSC_CURRENCY, INITIAL_CSC_DIM, RESOLVE_TYPE, PLACE_ID, SUPPL_OBJECT_ID, ITEM_TYPE, ITEM_DESCRIPTION,
+		ITEM_PURCHASE_DATE, SYSTEM_NOTES, ATTR1, ATTR2, ATTR3, ATTR4, ATTR5, INJURY_CAUSED_BY, SKIP_EVALUATION, SKIP_CALCULATION, LIABILITY, EX_GRATIA 		FROM INSIS_GEN_V10.CLAIM_OBJECTS		
+			WHERE  CLAIM_OBJ_SEQ IN 		
+			('2080880084',
+'2080880085',
+'2080880087')) a;
+
+
+select * from INSIS_GEN_V10.CLAIM_PARTICIPANTS where PARTICIPANT_ID IN ('100000003953197',
+'100000003953201',
+'100000003953205',
+'100000003953209',
+'100000003953210',
+'100000003953211',
+'100000003953215',
+'100000003953219',
+'100000003953223',
+'100000003953227',
+'100000003953231',
+'100000003953235',
+'100000003953236');
+
+select * from INSISHIST.IGV_CLAIMPARTICIPANTS where PARTICIPANT_ID IN ('100000003953197',
+'100000003953201',
+'100000003953205',
+'100000003953209',
+'100000003953210',
+'100000003953211',
+'100000003953215',
+'100000003953219',
+'100000003953223',
+'100000003953227',
+'100000003953231',
+'100000003953235',
+'100000003953236');
+
+/* B81D2R */
+insert into   INSISHIST.IGV_CLAIMPARTICIPANTS   ( CLAIM_ID,REQUEST_ID,PARTICIPANT_ID,MAN_ID,PARTICIPANT_ROLE,APPOINTMENT_DATE,REPORT_NO,REPORT_DATE,NOTES,BENEF_PERCENTAGE,REGISTRATION_DATE,USERNAME,DB_OP_TYPE,SRC_COMMIT_TS,BFR_AFT_IND,GG_CSN,GG_TFILE_SEQNO,GG_TFILE_RBA) SELECT CLAIM_ID,REQUEST_ID,PARTICIPANT_ID,MAN_ID,PARTICIPANT_ROLE,APPOINTMENT_DATE,REPORT_NO,REPORT_DATE,NOTES,BENEF_PERCENTAGE,REGISTRATION_DATE,USERNAME, 'INSERT' as DB_op_type, SYSDATE as src_commit_ts, 'AFTER' as BFR_AFT_IND,null AS GG_CSN,null AS GG_TFILE_SEQNO,null AS GG_TFILE_RBA from (SELECT * from INSIS_GEN_V10.CLAIM_PARTICIPANTS   WHERE PARTICIPANT_ID IN ( '100000003953197',
+'100000003953201',
+'100000003953205',
+'100000003953209',
+'100000003953210',
+'100000003953211',
+'100000003953215',
+'100000003953219',
+'100000003953223',
+'100000003953227',
+'100000003953231',
+'100000003953235',
+'100000003953236'));
+
+
+
+
+
+

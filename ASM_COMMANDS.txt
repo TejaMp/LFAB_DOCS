@@ -1,0 +1,130 @@
+To ADD new disks:
+col path for a40
+col name for a40
+set lines 300
+select GROUP_NUMBER,DISK_NUMBER,NAME,path,os_mb/1024,header_Status from v$asm_disk where header_Status!='MEMBER' order by path;
+
+ALTER DISKGROUP DATA ADD DISK '/dev/oracleasm/DATA224' NAME DATA_0164 REBALANCE POWER 500;
+
+select group_number,POWER, operation, est_minutes from v$asm_operation;
+
+
+select name, ROUND(total_mb/1024,2) as total_gb, ROUND(free_mb/1024,2) as free_gb from v$asm_diskgroup;
+
+select group_number,file_number,type, round(bytes/1024/1024,0) MB from v$asm_file where group_number= (SELECT group_number from v$asm_diskgroup where name = 'REDO');
+
+run as grid user or sysasm
+
+--> See ASM space breakdown in MB 
+select name,total_mb,free_mb,required_mirror_free_mb, usable_file_mb from v$asm_diskgroup where name='REDO';
+
+--> List all files and their sizes inside +REDO
+select group_number, type, bytes/1024/1024/1024  as size_gb from v$asm_file where group_number = (select group_number from v$asm_diskgroup where name='REDO') order by size_gb desc;
+
+--> Identify if any archive logs are in +REDO
+select name from v$archived_log where name like '+REDO%';
+
+set lines 300
+col name for a10
+col state for a10
+col type for a10
+col total_gb for 999,999.999
+col free_gb for 999,999.999
+col usable_gb for 999,999.999
+col PCT_USED for 999,999.999
+
+select group_number,
+		name,
+		state,
+		type,
+		ROUND (total_mb/1024,6) as total_gb,
+		ROUND (free_mb/1024,6) as free_gb,
+		ROUND (usable_file_mb/1024,6) as usable_gb,
+		ROUND (((total_mb - free_mb)/total_mb)*100,6) as PCT_USED
+	from
+		v$asm_diskgroup
+	ORDER BY
+		name;
+
+ACTUAL FRA USAGE:
+====================
+SELECT
+  NAME,
+  SPACE_LIMIT/1024/1024/1024 AS FRA_SIZE_GB,
+  SPACE_USED/1024/1024/1024 AS FRA_USED_GB,
+  NUMBER_OF_FILES,
+  ROUND(SPACE_USED/SPACE_LIMIT*100, 2) AS USED_PERCENT
+FROM V$RECOVERY_FILE_DEST;
+
+col name for a20
+select
+   name,
+  floor(space_limit / 1024 / 1024/1024) "Size GB",
+  ceil(space_used / 1024 / 1024/1024) "Used GB",
+  number_of_files
+from v$recovery_file_dest;
+
+STOP/DISABLE ASM FLITER DRIVER:
+====================
+[grid@e75lrl3045v bin]$ cd $ORACLE_HOME/bin
+[grid@e75lrl3045v bin]$  asmcmd afd_state
+ASMCMD-9526: The AFD state is 'LOADED' and filtering is 'ENABLED' on host 'e75lrl3045v.lfnet.se'
+[grid@e75lrl3045v bin]$ asmcmd afd_filter -d --all
+[grid@e75lrl3045v bin]$  asmcmd afd_state
+ASMCMD-9526: The AFD state is 'LOADED' and filtering is 'DISABLED' on host 'e75lrl3045v.lfnet.se'
+
+ASM:
+====
+[grid@e75lrl1054 bin]$ . oraenv
+ORACLE_SID = [grid] ? +ASM1
+The Oracle base has been set to /g01/app/grid_base
+[grid@e75lrl1054 bin]$ sqlplus / as sysasm
+
+select name,state, total_mb, free_mb from v$asm_diskgroup;
+
+set lines 300 long 9999999 pages 300
+select group_number, name, path from v$asm_disk;
+
+asmcmd lsdg # Lists ASM diskgroups
+asmcmd lsid # List ASM instance details
+asmcmd cd +DATA 
+asmcmd ls -lt #List files in the diskgroup
+asmcmd lsdsk  # to see ASM disk groups
+
+as root:
+pvdisplay
+lsblk
+/etc/udev/rules.d/ --> ASM disk rules if any
+
+set lines 200
+col name format a20
+col total_mb format 999,999,999
+col free_mb format 999,999,999
+col usable_file_mb format 999,999,999
+
+SELECT name,
+       total_mb,
+       free_mb,
+       usable_file_mb,
+       round((free_mb/total_mb)*100,2) as pct_free
+FROM v$asm_diskgroup;
+
+set lines 200
+col name format a20
+col total_gb format 999,999.99
+col free_gb format 999,999.99
+col usable_file_gb format 999,999.99
+
+SELECT name,
+       ROUND(total_mb/1024,2) AS total_gb,
+       ROUND(free_mb/1024,2) AS free_gb,
+       ROUND(usable_file_mb/1024,2) AS usable_file_gb,
+       ROUND((free_mb/total_mb)*100,2) AS pct_free
+FROM v$asm_diskgroup;
+
+asmcmd lsdg | awk 'NR==1{print $0,"Total_GB Free_GB Usable_GB"} NR>1{printf "%s %0.2f %0.2f %0.2f\n", $0, $7/1024, $8/1024, $10/1024}'
+
+asmcmd lsdg | awk 'NR==1{print "Name\tTotal_GB\tFree_GB\tUsable_GB"} NR>1{printf "%s\t%.2f\t%.2f\t%.2f\n", $14, $8/1024, $9/1024, $11/1024}'
+
+asmcmd lsdg | awk 'NR==1{print "Name\tTotal_GB\tFree_GB\tUsable_GB\tPercent_Used"} NR>1{used=($8-$9)/1024; total=$8/1024; percent=(used/total)*100; printf "%s\t%.2f\t%.2f\t%.2f\t%.2f%%\n", $14, total, $9/1024, $11/1024, percent}'
+

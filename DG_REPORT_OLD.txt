@@ -1,0 +1,92 @@
+#!/bin/bash
+###################################################################
+#Script Name    : DR-Monitoring.sh
+#Description    : This script will monitor the Oracle DG status and Log Sync
+#Author         : Sharang Dhar Dwivedi
+#Email          : Infosys-Ettsak-Infra-Team@lansforsakringar.se
+#
+######################## VERSION ##################################
+# 1.1 - Sharang Dhar Dwivedi - 2019/02/13                                                 #
+###################################################################
+
+export LANG=us_en.UTF-8
+export FILE_DIR=/home/oracle/scripts/DGMonitor
+export LOG_FILE=$FILE_DIR/DGstatus.log
+export EMAIL_ADDR=Infosys-Ettsak-Infra-Team@lansforsakringar.se
+export srvname=`hostname | tr '[:lower:]' '[:upper:]' | awk -F '.' '{print $1}'`
+export SUBJECT_LINE="Data Guard Status Report"
+export MSG="Hi Team, \n\n Please find the Dataguard status in attached report. \n
+Kindly have a look into it.\n\nThanks & Regards,\nInfosys Ettsak Infra Team"
+
+if [ -f  $LOG_FILE ]
+ then
+   # If outpot exists, it will delete the old file
+   rm  $LOG_FILE
+fi
+
+echo "#############################################################" > $LOG_FILE
+echo " Data Guard Status Report: `date ` " >> $LOG_FILE
+echo "#############################################################" >> $LOG_FILE
+echo "" >> $LOG_FILE
+
+# Checking DG status  for ESAKDB and REPODB
+for SID in ESAKDB1 REPODB1; do
+export ORACLE_SID=$SID
+export ORACLE_HOME=`cat /etc/oratab| grep -w "$ORACLE_SID"|cut -f2 -d ':'`
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib
+export PATH=$PATH:$ORACLE_HOME:$ORACLE_HOME/bin:/usr/ccs/bin:/bin:/usr/bin:/usr/sbin:/
+
+
+if [ "$ORACLE_SID" == "ESAKDB1" ]
+then
+        DB_NAME=ESAKDB
+        DR_DB_NAME1=INSISDR1		
+elif [ "$ORACLE_SID" == "REPODB1" ]
+then
+        DB_NAME=REPODB
+        DR_DB_NAME1=REPOSDB		
+else
+        echo "Please check ORACLE_SID value"
+
+fi
+
+# dgmgrl_func will run the DGMGRL(Data Guard broker) commands
+dgmgrl_func () {
+        dgmgrl << EOF  >> $LOG_FILE
+        connect /
+        Show database $1
+        Validate database $1
+        exit
+EOF
+}
+
+
+echo " " >> $LOG_FILE
+echo "Status of $DB_NAME primary Database:" >> $LOG_FILE
+echo "=======================================" >> $LOG_FILE
+dgmgrl_func $DB_NAME
+
+echo " " >> $LOG_FILE
+echo " " >> $LOG_FILE
+echo "Status of $DR_DB_NAME1 DR Database:      " >> $LOG_FILE
+echo "=======================================" >> $LOG_FILE
+dgmgrl_func $DR_DB_NAME1
+
+echo " " >> $LOG_FILE
+echo "===========================" >> $LOG_FILE
+echo "   DR SYNC STATUS REPORT     " >> $LOG_FILE
+echo "===========================" >> $LOG_FILE
+# Checking LOG Sync status
+#$ORACLE_HOME/bin/sqlplus -S "/ as sysdba" @$FILE_DIR/DGMonitoring.sql
+echo " " >> $LOG_FILE
+echo "=========================================================================" >> $LOG_FILE
+echo "=========================================================================" >> $LOG_FILE
+echo " " >> $LOG_FILE
+echo " " >> $LOG_FILE
+
+done
+
+echo " " >> $LOG_FILE
+echo "End Of the Report " >> $LOG_FILE
+# Sending email
+echo -e $MSG | mailx -s "$SUBJECT_LINE" -a $LOG_FILE $EMAIL_ADDR

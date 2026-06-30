@@ -1,0 +1,34 @@
+Prod DG setup:
+===============
+
+Primary - e75lrl1579/e75lrl1580 - 2node RAC - Grid -19.23 , RDBMS 19.8, ASMFD, TDE - backup running in primary
+Standby - e75lrl1054/e75lrl1055 - 2node RAC - Grid - 19.9 , RDBMS 19.8, UDEV, TDE 
+
+Data guard compatibility is determined by RDBMS version, not grid version - Hence having same database versions work for data gaurd.
+
+
+Monitoring report generated from OEM every 3 hours
+Archive log cleanup in DR is done by an OEM job
+
+
+Goldengate setup:
+================
+Replicating 112 tables from multiple INSIS% schemas to INSISHIST schema.
+source : INSIS_GEN_V10.CLAIM_INSPECTIONS - n columns
+target : INSISHIST.IGV_CLAIM_INSPECTIONS - n+6 columns
+
+"DB_OP_TYPE" => INSERT, DELETE, UPDATE
+"SRC_COMMIT_TS" => commit timstamp
+"BFR_AFT_IND" => Before OR After
+"GG_CSN"  => Goldengate CSN
+"GG_TFILE_SEQNO"  => Trail file number
+"GG_TFILE_RBA" => Position in the trail file
+
+MAP INSIS_GEN_V10.CLAIM_INSPECTIONS TARGET INSISHIST.IGV_CLAIM_INSPECTIONS , COLMAP ( USEDEFAULTS, db_op_type = @GETENV ('GGHEADER', 'OPTYPE'), src_commit_ts = @GETENV ('GGHEADER','COMMITTIMESTAMP'), bfr_aft_ind = @GETENV ('GGHEADER','BEFOREAFTERINDICATOR'), GG_CSN = @GETENV ('TRANSACTION','CSN'), GG_TFILE_SEQNO = @COMPUTE(@NUMSTR(@GETENV('RECORD','FILESEQNO'))*1), GG_TFILE_RBA = @GETENV('RECORD','FILERBA'));
+
+
+-- A job to monitor the missing records
+runs form OEM, compares data between source and target table using SCN number and send the diff via email.
+
+Setup in PROD, UPGSIT and very few dev envs.
+ 

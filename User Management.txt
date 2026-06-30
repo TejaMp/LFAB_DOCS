@@ -1,0 +1,365 @@
+Application User
+================
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS WHERE USERNAME='E462I';
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS WHERE USERNAME='ODS';
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS WHERE USERNAME='DBSNMP';
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS order by 2;
+
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS where username like '%BW_OCH%';
+
+select username,account_status,profile,created from dba_users where profile in ('APPL_Y','P_SCHEMA');
+
+AIDPRE2> select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS WHERE USERNAME='WARTUNG';
+
+USERNAME   ACCOUNT_STATUS                   PROFILE                        LOCK_DATE EXPIRY_DA
+---------- -------------------------------- ------------------------------ --------- ---------
+WARTUNG    EXPIRED(GRACE)                   APPL_Y                                   20-FEB-20
+
+1 row selected.
+
+
+alter user wartung profile default;
+alter user wartung identified by Warte67_mich account unlock;
+alter user wartung profile APPL_Y;
+
+
+
+alter user DBSNMP profile default;
+alter user DBSNMP identified by P8gH4_ju account unlock;
+alter user DBSNMP profile SYS_Y;
+
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='K329I';
+
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='INTRA2'; 
+
+set lines 200
+col db_link for a20
+col host for a20
+select * from dba_db_links;
+
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS WHERE USERNAME='E462I';
+
+
+
+select username,ACCOUNT_STATUS,PROFILE,LOCK_DATE,EXPIRY_DATE FROM DBA_USERS WHERE USERNAME='TRANSFORM_AIDA';
+
+SELECT OWNER,OBJECT_NAME,OBJECT_TYPE FROM DBA_OBJECTS WHERE OWNER='TRANSFORM_AIDA';
+
+SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='TRANSFORM_AIDA';
+
+set head off
+set pages 0
+set long 9999999
+
+select dbms_metadata.get_ddl('USER', username) || '/' usercreate from dba_users where username='DBSNMP';
+
+
+select username,ACCOUNT_STATUS,PROFILE FROM DBA_USERS WHERE USERNAME='P258';
+
+select username,PROFILE FROM DBA_USERS WHERE USERNAME like '%EX%';
+
+alter user IOM_DATA profile default;
+
+alter user IOM_DATA identified by X3uB7_2v account unlock;
+
+alter user IOM_DATA profile 
+
+select username,ACCOUNT_STATUS,PROFILE FROM DBA_USERS WHERE USERNAME like '%E%';
+
+
+OMSIT> select object_name,owner from dba_objects where object_name='TUMS_USER_AUD';
+
+
+IOMSIT>  select object_name,owner from dba_objects where object_name='TUMS_REVISIONS';
+
+OBJECT_NAME                    OWNER
+------------------------------ --------------------
+TUMS_REVISIONS                 SEEASDB0
+TUMS_REVISIONS                 SEEASDB1
+
+IOMSIT> grant select,insert,update,delete on SEEASDB0.TUMS_REVISIONS  to IOM_ATS;
+
+TUMS_USERS_AUD
+
+grant select,insert,update,delete on SEEASDB0.TUMS_USERS_AUD to IOM_ATS;
+grant select,insert,update,delete on SEEASDB1.TUMS_USERS_AUD to IOM_ATS;
+
+
+
+
+select role, table_name, privilege 
+from role_tab_privs
+where table_name in ('INTRA_OWNER') order by role;
+
+create user K402I identified by Spring$402 TEMPORARY TABLESPACE TEMP default tablespace users profile EXXXI;
+grant create session to K402I;
+grant R_AIM_RO to K402I;
+grant R_DOM_RO to K402I;
+
+
+create user K329I identified by Spring$329 TEMPORARY TABLESPACE TEMP default tablespace users profile EXXXI;
+GRANT "R_K329I_RO" TO "K329I";
+GRANT CREATE SESSION TO "K329I";
+ALTER USER "K329I" DEFAULT ROLE ALL;
+GRANT "RESOURCE" TO "K329I";
+   GRANT "R_TXE_READ" TO "K329I";
+   GRANT "R_RUI_READ" TO "K329I";
+   GRANT "R_RUI_KI_READ" TO "K329I";
+   GRANT "R_MIB_READ" TO "K329I";
+   GRANT "R_TEA_READ" TO "K329I";
+   GRANT "R_TAX_RO" TO "K329I";
+
+
+grant mdis_sbl_ifc to ex1814i;
+grant r_connect to ex1814i;
+grant create session to K402I;
+
+
+create user o200 identified by Spring$123 TEMPORARY TABLESPACE TEMP default tablespace users profile EXXXI;
+grant sse_role to ex1814i;
+grant mdis_corr to ex1814i;
+grant mdis_read to ex1814i;
+grant mdis_sbl_ifc to ex1814i;
+grant r_connect to ex1814i;
+grant create session to ex1814i;
+
+
+create role R_KAFKA_MICSERV
+
+
+CREATE PROFILE "EXXXI_NOEXP"
+    LIMIT
+         COMPOSITE_LIMIT UNLIMITED
+         SESSIONS_PER_USER UNLIMITED
+         CPU_PER_SESSION UNLIMITED
+         CPU_PER_CALL UNLIMITED
+         LOGICAL_READS_PER_SESSION UNLIMITED
+         LOGICAL_READS_PER_CALL UNLIMITED
+         IDLE_TIME UNLIMITED
+         CONNECT_TIME UNLIMITED
+         PRIVATE_SGA UNLIMITED
+         FAILED_LOGIN_ATTEMPTS 5
+         PASSWORD_LIFE_TIME UNLIMITED
+         PASSWORD_REUSE_TIME 315360000/86400
+         PASSWORD_REUSE_MAX 10
+         PASSWORD_VERIFY_FUNCTION "VERIFY_FUNCTION_AIRPLUS"
+         PASSWORD_LOCK_TIME UNLIMITED
+         PASSWORD_GRACE_TIME 1296000/86400;
+         INACTIVE_ACCOUNT_TIME UNLIMITED;
+
+
+Select 'GRANT SELECT ON INTRANET_OWNER.'||Table_Name||' TO R_INTRANET;' From All_Tables Where Owner='INTRANET_OWNER';
+
+
+Select 'GRANT SELECT ON CS2.'||Table_Name||' TO R_CS2_RO;' From All_Tables Where Owner='CS2';
+
+Select 'GRANT SELECT,INSERT,UPDATE,DELETE ON SLACHECK_OWNER.'||Table_Name||' TO SLACHECK_WRITER;' From All_Tables Where Owner='SLACHECK_OWNER';
+
+OPSDEV> SELECT GRANTED_ROLE FROM DBA_ROLE_PRIVS WHERE GRANTEE='EPROC_USER';
+
+GRANTED_ROLE
+------------------------------
+R_EPROC_RO
+CONNECT
+R_EPROC_APP
+R_EPROC_ADM
+RESOURCE
+
+
+Select 'alter tablespace '||Tablespace_Name||' end backup;' From dba_tablespaces;
+
+select * from dba_tab_privs where GRANTEE='R_INTRA_USER' AND TABLE_NAME='CORE_LOCALIZED_VALUE_BO';
+
+
+create user NSCALE_KAFKA_IN identified by Kafip$9102 TEMPORARY TABLESPACE TEMP default tablespace NSC_MOM_DAT profile APPL_Y;
+
+grant r_kafka_micserv to NSCALE_KAFKA_IN;
+grant create session to NSCALE_KAFKA_IN;
+
+
+create user NSCALE_KAFKA_OUT identified by Kafop$9102 TEMPORARY TABLESPACE TEMP default tablespace NSC_MOM_DAT profile APPL_Y;
+
+grant r_kafka_micserv to NSCALE_KAFKA_OUT;
+grant create session to  NSCALE_KAFKA_OUT;
+
+
+
+grant mdis_corr to ex1814i;
+grant mdis_read to ex1814i;
+grant mdis_sbl_ifc to ex1814i;
+grant r_connect to ex1814i;
+grant create session to ex1814i;
+
+CREATE USER "NSCALE_MOM_RC_IN" IDENTIFIED BY VALUES 'S:36D7CC5C4DBD41A542D50B
+59CF3ED093A2DD2E986EDCA88A90BEC6EFF51D;F7CBD6CB456BBB1C'
+      DEFAULT TABLESPACE "NSC_MOM_DAT"
+      TEMPORARY TABLESPACE "TEMP"
+      PROFILE "APPL_Y"/
+
+
+
+grant R_OEM to ex1814i;
+grant create session to ex1814i;
+
+alter user EASYGO profile appl_y;
+alter user  EASY_SVC3 profile appl_y;
+
+gv0s5rae
+
+
+SQL> select name,password from user$ where name='KIFPS_ONLINE';
+
+NAME                           PASSWORD
+------------------------------ ------------------------------
+EASYGO                         C6E5C2DCFE8105CE
+
+SQL> select name,password from user$ where name='EASY_SVC3';
+
+NAME                           PASSWORD
+------------------------------ ------------------------------
+EASY_SVC3                      40E036038C67D1E4
+
+EASPET> select name,password from user$ where name='ANTRTOOL';
+
+NAME                           PASSWORD
+------------------------------ ----------
+ANTRTOOL                       150DB1A4A3
+                               D6510B
+
+
+Normal User
+===========
+
+alter user DBSNMP identified by values 'S:342CC6E95C3F1A4BB8DEEEA1D346F32D987E1DEF4D8241CF872BC5C071D1;T:E690F490A67CC34E35756748C2B661805E7313EB2FB02E429508E8318CDC03EDD5B3B4F623B5D4F1F3B926F9BCD0B98658EC70CC6B6ED5D33F50C192664D89CE16034AE4DD64E6FEA2602C7C57940930' account unlock;
+
+
+FINDING PASSWORD VALUE OF A USER:
+================================
+
+SQL> select PASSWORD,NAME from user$ where name='BODI_BATCH';
+84D751343230768C               BODI_BATCH
+
+P8gH4_ju
+
+
+TO FIND THE TABLE_NAME,OWNERNAME, PRIVILEGES OF A ROLE:
+========================================================
+
+col grantee for a25
+col TABLE_NAME for a20
+col grantor for a20
+
+select * from dba_tab_privs where GRANTEE='SLACHECK_WRITER';
+
+ 
+FINDING PASSWORD VALUE OF ALL THE USERS:
+================================
+
+
+set head off
+set pages 9999
+set long 9999999
+
+select dbms_metadata.get_ddl('USER', username) || '/' usercreate from dba_users;
+
+
+FINDING PASSWORD VALUE OF A Particular USER:
+==========================================
+
+set head off
+set pages 0
+set long 9999999
+
+select dbms_metadata.get_ddl('USER', username) || '/' usercreate from dba_users where username='BO_AUDIT_REPO';
+
+set head off
+set pages 0
+set long 9999999
+
+select dbms_metadata.get_ddl('TABLESPACE', tablespace_name) || '/' usercreate from dba_tablespaces where tablespace_name='SEELOB';
+
+set head off
+set pages 0
+set long 9999999
+
+select dbms_metadata.get_ddl('LINK', db_link) || '/' usercreate from dba_db_links where DB_LINK='ZEFPRS';
+
+
+Set long 1000
+SELECT DBMS_METADATA.GET_DDL('DB_LINK',db.db_link,db.owner) from dba_db_links db where DB_LINK='SRS_SNAP.WORLD';
+
+CREATE DATABASE LINK "PRSPRD.WORLD" CONNECT TO "PERSIS" IDENTIFIED BY VALUES '0E7C77B8DED01D44' USING 'PRSPRD';
+
+
+select trim(l.owner)||'__'||trim(l.db_link)||'__'||trim(l.username)||'__'||trim(l.host) , '30'
+, ' CREATE DATABASE LINK  '||trim(l.db_link)
+||' CONNECT TO "'||trim(l.username)||'"'
+||' IDENTIFIED BY "NNNNNNNN" '
+||' USING '||trim(l.host) ||' ; 'AS MYCOMMAND
+from dba_db_links l , V$INSTANCE i , dba_users u  
+where l.username = u.username
+and l.username is not null 
+and l.username <> ' '
+ORDER BY 1,2,3
+
+
+SRS_SNAP.WORLD
+
+2. TXN_USER (TXNTST): At the moment we have problems to keep the 31.12.2019. Unfortunately, many different applications use this user. 
+Different people are responsible for these applications and the password change must be coordinated. 
+We therefore ask you to extend the validity of the old password until 31.01.2020.
+3. KIFPS_ONLINE (TXNPRD): The colleague Vadim Jankowski is 
+
+
+set head off
+set pages 0
+set long 9999999
+
+select dbms_metadata.get_ddl('ROLE', role) || '/' ROLE from dba_roles where role='R_INTRA_USER';
+
+
+
+
+set head off
+set pages 9999
+set long 9999999
+
+select dbms_metadata.get_ddl('SEQUENCE', sequence_name) || '/' sequence from dual where sequence_name='PUSR_ID_SEQ';
+
+select dbms_metadata.get_ddl('INDEX','TXHI_PK_NEW2','TXN_OWNER') from dual
+
+
+
+set pages 0
+set long 9999999
+select dbms_metadata.get_ddl('PACKAGE','MERCURY_REQUEST','ORBIS') || '/' usercreate from dual
+
+
+set pages 0
+set long 9999999
+select dbms_metadata.get_ddl('PACKAGE','MERCURY_UTILS','ORBIS') || '/' usercreate from dual
+
+set lines 9999
+set pages 9999999
+set long 9999999
+set trimspool on
+set longchunksize 99999999
+select dbms_metadata.get_ddl('PACKAGE','MERCURY_UTILS','ORBIS') from dual;
+
+ORBIS.AIRPLUS_PKG
+
+
+SEECFGRUN	gHs_t5k3
+IOM_CONFIGURATION	gM3s_1K3
+
+IOMSIT
+
+SEEASDB0	X3uB7_2v
+IOM_CONFIGURATION	ExJVL56hdK
+IOM_DATA	X3uB7_2v

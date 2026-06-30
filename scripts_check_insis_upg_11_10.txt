@@ -1,0 +1,27 @@
+SELECT s.sid,
+       s.serial#,
+       s.username,
+       s.status,
+       s.event,
+       s.wait_class,
+       s.seconds_in_wait,
+       s.module,
+       s.action
+FROM   v$session s
+WHERE  s.module LIKE 'Data Pump%';
+
+select 
+a.sid,
+a.serial#,
+b.status,
+a.opname,
+to_char(a.start_time,'dd-Mon-YYYY HH24:mi:ss') START_TIME,
+to_char(a.Last_update_time,'dd-Mon-YYYY HH24:mi:ss') LAST_UPDATE_TIME,
+a.time_remaining as "Balance Sec",
+a.time_remaining/60 as "Bal Min",
+a.time_remaining/60/60 as "Bal HR"
+from v$session_longops a,v$session b where a.sid=b.sid and time_remaining > 0 order by b.status;
+
+INSERT INTO LIQUIBASE_USER.DATABASECHANGELOG(ID, AUTHOR, FILENAME, DATEEXECUTED, ORDEREXECUTED, EXECTYPE, MD5SUM, DESCRIPTION, COMMENTS, TAG, LIQUIBASE, CONTEXTS, LABELS, DEPLOYMENT_ID)
+  VALUES('11400_import_jbpm', 'B940GY', 'changelog_11400.xml', '03/20/2026 11:57:22.601940000', 5974, 'EXECUTED', '', 'executeCommand', NULL, NULL, '4.30.0', NULL, NULL, '3992310762');
+ 

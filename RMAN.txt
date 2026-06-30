@@ -1,0 +1,41 @@
+Restore archive log between 2 scn numbers:
+RMAN:
+
+run {
+    allocate channel c1 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+    set archivelog destination to '+ARCHIVE';
+    restore archivelog scn between  12485276299 and 12486652454;
+    release channel c1; 
+}
+
+run
+{
+allocate channel c1 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+allocate channel c2 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+allocate channel c3 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+allocate channel c4 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+set archivelog destination to '+ARCHIVE';
+restore archivelog from scn 25944330402;
+release channel c1; 
+release channel c2; 
+release channel c3;
+release channel c4;
+}
+
+run
+{
+allocate channel c1 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+allocate channel c2 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+allocate channel c3 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+allocate channel c4 DEVICE TYPE sbt PARMS='SBT_LIBRARY=/opt/hds/Base/libobk.so';
+set archivelog destination to '+ARCHIVE';
+restore archivelog scn between  387054532691 and 387225821830;
+release channel c1; 
+release channel c2; 
+release channel c3;
+release channel c4;
+}
+
+Datalake team has all the golden gate information.
+
+

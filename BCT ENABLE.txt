@@ -1,0 +1,5 @@
+SELECT STATUS, FILENAME FROM V$BLOCK_CHANGE_TRACKING;
+
+ALTER DATABASE ENABLE BLOCK CHANGE TRACKING USING FILE '+DATA';
+
+https://learnomate.org/faster-oracle-block-change-tracking/

@@ -1,0 +1,61 @@
+Gather Statistics:
+====================
+
+select job_status,job_start_time,job_duration,job_info from dba_autotask_job_history where job_start_time > systimestamp - 14 and client_name='auto_optimizer_stats_collection' order by job_start_time desc;
+
+Incremental statistics maintanance - one other option
+
+Gathering Statistics in Parallel – AUTO_DEGREE
+
+Gathering statistics with auto sample size initiates full table scans to inspect table data. We can leverage parallel execution to make these scans 
+complete in less time. To do this you can, for example, identify large tables and define a specific degree of parallelism (DOP):
+
+exec dbms_stats.set_table_prefs(user, 'BIG_TABLE', 'DEGREE', 16)
+
+There is an easier, set-and-forget approach where you can let Oracle to decide on the DOP for you:
+exec dbms_stats.set_table_prefs(user, 'BIG_TABLE', 'DEGREE', DBMS_STATS.AUTO_DEGREE)
+
+A clean and simple approach is to set the property at the global level:
+exec dbms_stats.set_global_prefs('DEGREE', DBMS_STATS.AUTO_DEGREE)
+
+With parallel execution in play, statistics gathering has the potential to consume lots of system resource, so you need to consider how to control this.
+When the auto stats gathering job executes it (by default) uses the resource management plan DEFAULT_MAINTENANCE_PLAN and a consumer group called ORA$AUTOTASK.
+This makes it very easy to make some adjustments and control just how much resource you want to dedicate to gathering statistics.
+
+
+https://blogs.oracle.com/optimizer/post/how-to-gather-optimizer-statistics-fast
+
+https://github.com/oracle-samples/oracle-db-examples/tree/main/optimizer/faster_stats
+
+Locked statistics
+
+It was another issue with locked optimizer statistics on some tables. Oracle DBMS_STATS package returned the following error message on some tables:
+
+ORA-20005: object statistics are locked (stattype = ALL)
+
+It was easy to identify 24 tables which had locked statistics:
+
+SELECT owner, table_name, stattype_locked, last_analyzed
+FROM dba_tab_statistics
+WHERE stattype_locked is not null
+ORDER BY 1,2;
+
+We used the option FORCE=TRUE with DBMS_STATS package to override the locked status and successfully gather statistics on these tables.
+
+More information and recommendation about locked optimizer statistics:
+
+https://blogs.oracle.com/optimizer/post/locked-optimizer-statistics-a-useful-tool-in-your-toolbox 
+
+FIXED TABLES
+
+We also noticed that there were many "FIXED TABLES" or "sys.X$" tables which were missing statistics.
+
+It is highly recommended that gather statistics on fixed tables when we do a database or application upgrade or make changes to the database configuration.
+
+execute DBMS_STATS.GATHER_FIXED_OBJECTS_STATS;
+
+The following link explains and recommends statistics on "FIXED TABLES":
+
+https://blogs.oracle.com/optimizer/post/fixed-objects-statistics-and-why-they-are-important 
+
+Now there is a scheduled job in Oracle Enterprise Manager (OEM) which will run on 15th of every month at 18.00 CET for 40-45 minutes.

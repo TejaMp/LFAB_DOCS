@@ -1,0 +1,286 @@
+Server list for prod patching as of 18-oct-2024
+e75lrl1004v - ENDEAVOR, TASKFORC --> pipeline can be used --> stopped
+e75lrl1054 - INSISDR1(DR)
+e75lrl1055 - INSISDR2(DR)
+e75lrl1579 - ESAKDB1 (PROD)
+e75lrl1580 - ESAKDB2 (PROD) 
+e75lrl1545v - BLITZER,PRDCLN --> pipeline can be used --> 
+e75lrl2036v - INSIAUD -- 
+e75lrl1025v - OEMDB, CAVEMAN - 
+e75b0495 - logical standby - 
+- TASKFORC
+- ENDEAVOR
+--
+e75lrl1025v is also prod category, but it is RHEL 7, sometimes it will be patches, sometimes not.
+If OEM server is not in patching slot, we need to create blackouts for the servers and envs which is in the slot.
+
+e75lrl1025v - OEMDB, CAVEMAN
+
+
+We have stopped all EttSak database services as outlined in the email thread below.
+Kindly proceed with your activity.
+
+Please acknowledge receipt of this email and inform us once your activity is complete.
+
+Bringing down servers.
+
+1.stop OEM. 
+
+--> login oem database
+set lines 300 pages 200
+SELECT 'emcli modify_incident_rule -action=''disable'' -type=''ruleset'' -rule_set_name='''||RULESET_NAME||''''
+from sysman.EM_RULE_SETS WHERE IS_enableD=1;
+
+--output looks like below
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Prod Services Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF INSIS Prod database Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF WebLogic Server Incident Rule'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='EMASR Ruleset to clear cell generated WARN alert'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='EMASR Ruleset to clear EMSI Server ILOM generated WARN alert'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='RCA_INTERNAL_RULESET'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF Database Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Non Prod Database Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF Prod WebLogic and Application Incident Rule'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Prod Blackout Notification Alert'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Service Now incident Testing'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='INSIS application Prod SLA'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='OS Resource Monitor Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Prod OS Resource Monitoring'
+
+latest:
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF INSIS Prod database Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF WebLogic Server Incident Rule'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='EMASR Ruleset to clear cell generated WARN alert'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='EMASR Ruleset to clear EMSI Server ILOM generated WARN alert'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='RCA_INTERNAL_RULESET'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='LF Database Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Non Prod Database Incident Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Monitor EttSAK Logical Database'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='DEFAULT_RULESET_FOR_ALL_TARGETS'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='EM_UPDATE_RULESET'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Service Now incident Testing'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='OS Resource Monitor Rules'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Oracle GoldenGate incident rule'
+emcli modify_incident_rule -action='disable' -type='ruleset' -rule_set_name='Prod OS Resource Monitoring'
+
+
+
+--->  Login as sysman
+emcli login -username=sysman -password=Lf0eM13csYsLog1n
+
+--execute the output from above command to enable all incident rules before bringing down OMS.
+
+<now disable incident rules>
+
+-- once incident rules are disabled, stop oms
+emctl stop oms -all
+
+stop OEMDB, CAVEMAN 
+
+stop (ASM,grid)
+ crsctl check has
+ crsctl stop has
+ crsctl check has
+
+ 
+2. Stop Data gaurd replication using DGMGRL 
+
+dgmgrl /
+
+#stop data gaurd archive
+
+show database ESAKDB
+show database INSISDR
+
+EDIT DATABASE 'INSISDR' SET STATE='APPLY-OFF';
+
+show database ESAKDB
+show database INSISDR
+
+--same has to be done for REPODB
+show database REPODB
+show database REPODR
+EDIT DATABASE 'REPODR' SET STATE='APPLY-OFF';
+
+-- stop DR database. 
+
+srvctl status database -d INSISDR
+srvctl stop database -d INSISDR -o immediate
+srvctl status database -d INSISDR
+
+srvctl status database -d REPODR
+srvctl stop database -d REPODR -o immediate
+srvctl status database -d REPODR
+
+as root user stop cluster.
+
+crsctl check cluster
+crsctl stop cluster -all
+crsctl check cluster
+
+
+STOP LOGICAL STANDBY DB:
+
+4. Stop GG servies for Dataware-House
+
+ps -ef|grep mgr   --> cmd will get you the gghome location
+GGSCI (e75lrl1579.lfnet.se) 1> info all
+
+Program     Status      Group       Lag at Chkpt  Time Since Chkpt
+
+MANAGER     RUNNING
+EXTRACT     RUNNING     INEDW       00:00:04      00:00:01
+REPLICAT    RUNNING     INRDW       00:00:00      00:00:09
+
+
+INFO ALL
+STOP EXTRACT *
+STOP REPLICAT *
+STOP *
+STOP MGR
+
+5. Stop  prod database
+
+srvctl status database -d ESAKDB
+srvctl stop database -d ESAKDB -o immediate
+srvctl status database -d ESAKDB 
+
+srvctl start database -d ESAKDB
+
+srvctl status database -d REPODB
+srvctl stop database -d REPODB -o immediate
+srvctl status database -d REPODB
+
+as root user stop cluster:
+
+crsctl check cluster
+crsctl stop cluster -all
+crsctl check cluster
+
+==================================================
+Starting up.
+
+1.start OEM.
+
+start (ASM,grid)
+ crsctl check has
+ crsctl start has
+ crsctl check has
+ 
+start DB (check listener status)
+emctl start oms
+emctl status oms
+
+emcli login -username=sysman -password=Lf0eM13csYsLog1n
+emcli sync
+
+
+
+set lines 300 pages 200
+SELECT 'emcli modify_incident_rule -action=''enable'' -type=''ruleset'' -rule_set_name='''||RULESET_NAME||''''
+from sysman.EM_RULE_SETS WHERE IS_enableD=0;
+
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='Prod Services Incident Rules'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='LFPOCDB alerts'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='LF INSIS Prod database Incident Rules'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='LF WebLogic Server Incident Rule'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='EMASR Ruleset to clear cell generated WARN alert'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='EMASR Ruleset to clear EMSI Server ILOM generated WARN alert'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='RCA_INTERNAL_RULESET'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='LF Database Incident Rules'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='Non Prod Database Incident Rules'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='LF Prod WebLogic and Application Incident Rule'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='DEFAULT_RULESET_FOR_ALL_TARGETS'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='EM_UPDATE_RULESET'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='Prod Blackout Notification Alert'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='Service Now incident Testing'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='INSIS application Prod SLA'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='OS Resource Monitor Rules'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='Oracle GoldenGate incident rule'
+emcli modify_incident_rule -action='enable' -type='ruleset' -rule_set_name='Prod OS Resource Monitoring'
+
+
+
+execute the output from above command to enable all incident rules.
+
+<now enable incident alerts>
+
+2. start prod DB
+
+as root user start cluster: if not already started
+
+crsctl check cluster
+crsctl start cluster
+crsctl check cluster
+
+srvctl status database -d ESAKDB
+srvctl start database -d ESAKDB -o open
+srvctl status database -d ESAKDB
+
+srvctl status database -d REPODB
+srvctl start database -d REPODB -o open
+srvctl status database -d REPODB
+
+3. start GG servies(DWH) --> at the end start it. After the database start and sync and everything later
+
+INFO ALL
+START MGR
+START EXTRACT *
+START REPLICAT *
+START *
+
+4. bring up Dr database.
+
+as root user start cluster.
+
+crsctl check cluster
+crsctl start cluster
+crsctl check cluster
+
+
+srvctl start database -d REPODR -o mount
+
+srvctl status database -d REPODR
+srvctl start database -d REPODR -o open
+srvctl status database -d REPODR 
+
+srvctl status database -d INSISDR
+srvctl start database -d INSISDR -o open
+srvctl status database -d INSISDR
+
+
+4. Start Data gaurd replication 
+
+dgmgrl /
+
+show database ESAKDB
+show database INSISDR
+validate database ESAKDB
+validate database INSISDR
+
+EDIT DATABASE 'INSISDR' SET STATE='APPLY-ON';
+
+--for REPODR
+
+
+show database REPODB
+show database REPSODB
+validate database REPODB
+validate database REPODR
+
+EDIT DATABASE 'REPODR' SET STATE='APPLY-ON';
+
+
+5. start GG on PROD
+[grid@e75lrl1579 ~]$ ps -ef | grep mgr
+grid      204615       1  0 Jul15 ?        00:01:32 ./mgr PARAMFILE /gghome/app/product/ogg19c/dirprm/mgr.prm REPORTFILE /gghome/app/product/ogg19c/dirrpt/MGR.rpt PROCESSID MGR
+grid     2754827 2753023  0 08:27 pts/12   00:00:00 grep --color=auto mgr
+
+cd /gghome/app/product/ogg19c
+
+./ggsci
+
+start mgr
+start *
+
+

@@ -1,0 +1,395 @@
+To Enable level 12 Trace :
+**************************
+1.Query to find OSPID 
+*********************
+select p.PID,p.SPID,s.SID 
+from v$process p,v$session s 
+where s.paddr = p.addr 
+and s.sid = &SESSION_ID; 
+
+select * from v$session where paddr in (select addr from v$process where spid =&OS_PID);
+
+connect / as sysdba 
+oradebug setospid <<OSPID from above>> 
+oradebug unlimit 
+oradebug event 10046 trace name context forever,level 12 
+oradebug event 10046 trace name context off 
+
+2.To enable Hanganalyze Trace file : 
+**********************************
+
+sqlplus '/ as sysdba' 
+oradebug setmypid 
+oradebug unlimit 
+oradebug hanganalyze 3 
+-- Wait 2 minutes before getting the second hanganalyze 
+oradebug hanganalyze 3 
+-- Wait 2 minutes before getting the second hanganalyze 
+oradebug hanganalyze 3 
+oradebug tracefile_name 
+exit
+
+3.How to get TKPROF: 
+*******************
+tkprof <<TRACFILE_NAME>> <<TRACEFILE_NAME.OUT>> SYS=NO 
+--------
+v$session:
+--------
+select sid,serial#,sql_id,username,status,program,to_char(logon_time,'dd-mm-yyyy HH24:MI:SS') logon_time,event, program,terminal,machine,osuser from v$session where username='PERSIS';
+To find out sql_text using SID :
+********************************
+select s.sid,sq.sql_text from v$session s, v$sqlarea sq
+where s.SQL_ADDRESS = sq.ADDRESS and s.sql_hash_value=sq.hash_value
+and s.sid=&SESSION_ID;
+
+SELECT
+    s.sid,
+    s.serial#,
+    s.username,
+    s.program,
+    t.start_time,
+    s.logon_time,
+    sq.sql_text
+FROM
+    v$session s
+JOIN
+    v$transaction t
+ON
+    s.saddr = t.ses_addr
+JOIN
+    v$sql sq
+ON
+    s.sql_id = sq.sql_id
+WHERE
+    s.sid = 2592;
+
+SELECT
+    blocking_session,
+    sid,
+    serial#,
+    wait_class,
+    seconds_in_wait
+FROM
+    v$session
+WHERE
+    blocking_session IS NOT NULL;
+	
+alter system kill session '513,10831' immediate;
+
+SELECT 
+    s.sid,
+    s.serial#,
+    s.username,
+    s.program,
+    q.sql_text,
+    q.sql_id,
+    s.status,
+    s.osuser,
+    s.machine,
+    s.module,
+    s.action
+FROM 
+    v$session s
+JOIN 
+    v$sql q
+ON 
+    s.sql_id = q.sql_id
+WHERE 
+    s.status = 'ACTIVE'
+AND 
+    s.username IS NOT NULL;
+
+
+SELECT
+    s.sid,
+    s.serial#,
+    s.username,
+    s.osuser,
+    s.machine,
+    s.program,
+    l.object_id AS "Object ID",
+    o.object_name,
+    o.object_type,
+    l.locked_mode
+FROM
+    v$locked_object l
+JOIN
+    dba_objects o
+ON
+    l.object_id = o.object_id
+JOIN
+    v$session s
+ON
+    l.session_id = s.sid
+ORDER BY
+    s.sid;
+
+To find out spid using SID :
+****************************
+col sid format 999999
+col username format a20
+col osuser format a15
+select a.sid, a.serial#,a.username, a.osuser, b.spid from v$session a, v$process b where a.paddr= b.addr
+and a.sid='&sid' order by a.sid;
+
+To Find out the current session details using SID :
+***************************************************
+select sid,serial#,sql_id,username,status,program,to_char(logon_time,'dd-mm-yyyy HH24:MI:SS') logon_time,terminal,machine,osuser from v$session where sid='19';
+
+To Find out how much process has been completed using SID :
+***********************************************************
+select opname,sid,target,sofar,totalwork,message from v$session_longops where sid=9492;
+
+ select * from v$session_longops where sofar!=totalwork;
+
+
+
+COLUMN sid FORMAT 999
+COLUMN serial# FORMAT 9999999
+COLUMN machine FORMAT A30
+COLUMN progress_pct FORMAT 99999999.00
+COLUMN elapsed FORMAT A10
+COLUMN remaining FORMAT A10
+
+SELECT s.sid,
+       s.serial#,
+       s.machine,
+       TRUNC(sl.elapsed_seconds/60/60) || ':' || MOD(sl.elapsed_seconds,60) elapsed,
+       TRUNC(sl.time_remaining/60/60) || ':' || MOD(sl.time_remaining,60) remaining,
+       ROUND(sl.sofar/sl.totalwork*100, 2) progress_pct
+FROM   v$session s,
+       v$session_longops sl
+WHERE  s.sid     = sl.sid
+AND    s.serial# = sl.serial# and sl.time_remaining>0 ;
+
+To find table lock:
+*******************
+select a.sid||'|'|| a.serial#||'|'|| a.process
+ from v$session a, v$locked_object b, dba_objects c
+ where b.object_id = c.object_id
+ and a.sid = b.session_id
+ and OBJECT_NAME=upper('&TABLE_NAME');
+
+SELECT B.Owner, B.Object_Name, A.Oracle_Username, A.OS_User_Name  FROM V$Locked_Object A, All_Objects B
+WHERE A.Object_ID = B.Object_ID
+
+To kill the session using sid :
+********************************
+select sid, serial#,status,program,osuser,logon_time,machine from v$session where sid ='654';
+
+select sid,username,serial#,status,program,osuser,logon_time,machine from v$session where username='VALIDATION_OWNER';
+
+alter system kill session '164,23009' immediate;
+
+To kill the session in os level :
+*********************************
+col sid format 999999
+col username format a20
+col osuser format a15
+select a.sid, a.serial#,a.username, a.osuser, b.spid from v$session a, v$process b where a.paddr= b.addr
+and a.sid='&sid' order by a.sid;
+Find out the spid and check whether it is running or not and then kill it 
+************************************************************************
+ps -ef|grep 1234
+
+kill -9 32345
+
+
+To get the explain for your query :
+************************************
+EXPLAIN PLAN FOR  <you query here >
+
+EXPLAIN PLAN FOR  /execute portal_owner.ImportDaten.DKBZuordUebernehmen/
+
+/SELECT * FROM CUSTPRODUCTCHARGE WHERE CUSTOMER_REF = :B6 AND PRODUCT_SEQ = :B5 AND CHARGE_TYPE = :B4 AND GNVGEN.DATCOMPARE(START_DAT, :B3 ) = 0 AND ACCOUNT_NUM = :B2 AND NVL(BUDGET_CENTRE_SEQ, 0) = NVL(:B1 , 0);/
+
+To find out output details:
+***************************
+SQL> @?/rdbms/admin/utlxpls.sql
+
+using sql_id find out the explain plan output details :
+********************************************************
+SELECT * FROM TABLE(dbms_xplan.display_awr('9hm7w34nh16sq'));
+
+select plan_table_output from table(dbms_xplan.display_cursor('9hm7w34nh16sq',null,'basic'));
+
+select plan_table_output from table(dbms_xplan.display_awr('9hm7w34nh16sq',null));
+
+SELECT * FROM table(DBMS_XPLAN.DISPLAY_cursor('0d6ypkygzqgas'));
+
+select SQL_ID, PLAN_HASH_VALUE , sql_text from v$sql where SQL_ID='gwpc0wq6041bx';
+
+select SQL_ID, PLAN_HASH_VALUE , sql_text from v$sql where PLAN_HASH_VALUE=
+
+SELECT plan_hash_value, operation,OBJECT_NAME , cost, cardinality FROM DBA_HIST_SQL_PLAN WHERE plan_hash_value LIKE '2203783782'  ;
+
+Select SQL_ID,PLAN_HASH_VALUE,TIMESTAMP,REMARKS,time from dba_hist_sql_plan where  SQL_ID='b5f59xhmn8awd' order by TIMESTAMP;
+
+Using sid find out which is table currently accessing :
+*******************************************************
+
+select * from v$access where SID=382 ;
+
+To find out the sql_profile details :
+*************************************
+SQL> select name,status from dba_sql_profiles;
+
+NAME                           STATUS
+------------------------------ --------
+coe_711gvzdqwnz45_377196413    ENABLED
+coe_3ctm363h25bs7_4277234265   ENABLED
+coe_8uhj1j89hq4fs_4277234265   ENABLED
+coe_9ghtpdm791hzx_4277234265   ENABLED
+coe_0568cfrgh9p4y_449934599    ENABLED
+
+Using SQL_ID find out the current and old hash value :
+******************************************************
+
+SQL> select SQL_ID,PLAN_HASH_VALUE,TIMESTAMP,REMARKS,time from dba_hist_sql_plan where  SQL_ID='c0n7tgnv34cry' order by TIMESTAMP;
+
+To display hash value and sql id and date of execution using sqlid :
+*******************************************************************************
+
+set lines 155
+col execs for 999,999,999
+col avg_etime for 999,999.999
+col avg_lio for 999,999,999.9
+col begin_interval_time for a30
+col node for 99999
+break on plan_hash_value on startup_time skip 1
+select ss.snap_id, ss.instance_number node, begin_interval_time, sql_id, plan_hash_value,
+nvl(executions_delta,0) execs,
+(elapsed_time_delta/decode(nvl(executions_delta,0),0,1,executions_delta))/1000000 avg_etime,
+(buffer_gets_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_lio
+from DBA_HIST_SQLSTAT S, DBA_HIST_SNAPSHOT SS
+where sql_id = nvl('&sql_id','aszxyhxr1z65t')
+and ss.snap_id = S.snap_id
+and ss.instance_number = S.instance_number
+and executions_delta > 0
+order by 1, 2, 3 ; 
+
+  SNAP_ID   NODE BEGIN_INTERVAL_TIME            SQL_ID        PLAN_HASH_VALUE        EXECS    AVG_ETIME        AVG_LIO
+---------- ------ ------------------------------ ------------- --------------- ------------ ------------ --------------
+    217512      1 21-JUN-16 09.40.21.673         0568cfrgh9p4y       449934599            1      207.005      197,839.0
+
+
+To find out the query executions for last time: 
+***********************************************
+Col begin_interval_time format a30 
+Col node format 99 
+select ss.snap_id, ss.instance_number node, begin_interval_time, sql_id, plan_hash_value, 
+nvl(executions_delta,0) execs, 
+(elapsed_time_delta/decode(nvl(executions_delta,0),0,1,executions_delta))/1000000 avg_etime, 
+(buffer_gets_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_lio 
+from DBA_HIST_SQLSTAT S, DBA_HIST_SNAPSHOT SS 
+where sql_id = '&sql_id'  
+and ss.snap_id = S.snap_id 
+and ss.instance_number = S.instance_number 
+and executions_delta > 0 
+order by 1, 2, 3; 
+
+To find out the table Fragmentaion for particular owner name :
+**************************************************************
+set lines 300 pages 900;
+
+select table_name,NUM_ROWS,blocks,round((blocks*8),2) /1024 "Table_size_MB " , 
+                            round((num_rows*avg_row_len/1024),2)/1024 " TABLE_USED_MB",
+                            (round((blocks*8),2) - round((num_rows*avg_row_len/1024),2)) /1024 "FRAGMENT_SIZE_MB",
+((round((blocks*8),2) - round((num_rows*avg_row_len/1024),2)) /1024) / (round((blocks*8),2) /1024) * 100  "FRAGMENT_%", (SELECT COUNT(index_name) AS total_index
+   FROM dba_indexes cols
+   WHERE cols.table_name = tbls.table_name
+   ) "Total_index"
+from dba_tables tbls  where (round((blocks*8),2) > round((num_rows*avg_row_len/1024),2)) and owner='GENEVA_ADMIN'   
+order by 7 desc ;
+
+To find out the table Fragmentation for single or multiple table names :
+************************************************************************
+set lines 300 pages 300 ;
+
+select table_name,NUM_ROWS,blocks,round((blocks*8),2) /1024 "Table_size_MB " , 
+                            round((num_rows*avg_row_len/1024),2)/1024 " TABLE_USED_MB",
+                            (round((blocks*8),2) - round((num_rows*avg_row_len/1024),2)) /1024 "FRAGMENT_SIZE_MB",
+((round((blocks*8),2) - round((num_rows*avg_row_len/1024),2)) /1024) / (round((blocks*8),2) /1024) * 100  "FRAGMENT_%", (SELECT COUNT(index_name) AS total_index
+   FROM dba_indexes cols WHERE cols.table_name = tbls.table_name ) "Total_index" from dba_tables tbls  where (round((blocks*8),2) > round((num_rows*avg_row_len/1024),2)) and table_name in ('IPGOFCOMRULES','ACCOUNTSTATUS','ACCOUNTDETAILS','ACCOUNTATTRIBUTES','COSTEDEVENT')   
+order by 7 desc ;
+
+
+To find out the table Fragmentation without index details :
+***********************************************************
+select table_name,NUM_ROWS,blocks,round((blocks*8),2) /1024 "Table_size_MB " , 
+                            round((num_rows*avg_row_len/1024),2)/1024 " TABLE_USED_MB",
+                            (round((blocks*8),2) - round((num_rows*avg_row_len/1024),2)) /1024 "FRAGMENT_SIZE_MB",
+((round((blocks*8),2) - round((num_rows*avg_row_len/1024),2)) /1024) / (round((blocks*8),2) /1024) * 100  "FRAGMENT_%"
+from dba_tables where (round((blocks*8),2) > round((num_rows*avg_row_len/1024),2)) and owner='GENEVA_ADMIN' order by 7 desc ;
+
+Blocking Session details :
+**************************
+
+1. To check blocking session in database : 
+******************************************
+select l1.inst_id,l1.sid, 'IS BLOCKING',l2.sid
+from gv$lock l1,gv$lock l2
+where l1.block=1 and l2.request>0
+and l1.id1=l2.id1
+and l1.id2=l2.id2
+and l1.inst_id=l2.inst_id;
+
+2. To check blocking session in database : 
+*******************************************
+select blocking_session, sid, serial#, wait_class,seconds_in_wait from v$session where  blocking_session is not NULL order by  blocking_session;
+
+3.You can use these for blocking sessions:
+*****************************************
+set lines 1000
+set feedback on
+set linesize 175
+set pages 1000
+col schemaname for a15
+col username for a15
+col program for a30
+col machine for a20
+col SID_serial# for a15
+col lock_type for a15
+col mode_held for a10
+set echo off
+select s.sid||','||serial# "SID_serial#", s.sql_id, s.username, w.lock_type, w.mode_held, s.status, s.schemaname, s.machine, s.program, to_char(s.logon_time,'dd-mm-yy hh24:mi:ss') logon_time from v$session s, dba_waiters w where s.sid = w.holding_session and s.username not in ('SYS','SYSTEM');
+
+1.How check long running queries running more than 1 hour:
+=========================================================
+set line 200
+set pages 10000
+SELECT chr(12),a.instance_name,ss.SID,ss.serial#,p.spid pid,ss.status,ss.username,ss.osuser,ROUND(ss.last_call_et/60/60,0) run_hr,ss.logon_time,ss.machine  host,ss.terminal,ss.program,ss.process,ss.client_info,s.sql_text FROM v$instance a,v$session ss,v$sql s,v$process p WHERE ss.SQL_address=s.address AND  p.addr=ss.paddr and ss.username IS NOT NULL AND s.child_number <1 AND USERENV('SESSIONID')  <> ss.audsid AND  ROUND(ss.last_call_et/60/60) >= 1 AND ss.status  ='ACTIVE' ORDER BY ss.username, s.buffer_gets DESC;
+
+2. To find out Long ops :
+========================
+set linesize 300
+col sid format 9999999 heading "SID"
+col opname format a15
+col username for a15
+col target format a25
+col rmt format 99990 heading "Remaining|[min]"
+col bps format 9990.99 heading "blocks|[Units/s]"
+col fertig format 90.99 heading "complete[%]"
+col totalwork format 99999999
+select sid,
+        SERIAL#,
+        username,
+       opname,
+       target,
+       sofar,
+       totalwork,
+       (totalwork-sofar)/time_remaining bps,
+       time_remaining/60 rmt,
+       sofar/totalwork*100 fertig,
+        sql_id
+from   v$session_longops
+where  time_remaining > 0
+order by 8
+/
+
+select ERROR_MSG  from dba_resumable;
+
+Session and process count:
+===============================
+
+select resource_name, current_utilization, max_utilization, limit_Value from v$resource_limit where resource_name in('sessions','processes');

@@ -1,0 +1,893 @@
+@/oracle/admin/goto IOM_CONFIGURATION
+
+8039260
+
+8039250 nazar
+330399 master incident
+
+https://lnx-dbw01.airplus.net/dbaoracle/checkl_showhist.action
+
+Aircgi@123
+
+SR 3-21368968521 : Error message while applying the Vulnerabilities - TLS Certificate
+
+ssabdulraseed.extern@airplus.com sdtgarlanka.extern@airplus.com PSivagnanam.extern@airplus.com
+
+k93G#e58
+
+DBA PRD
+
+/oracle/admin/stats/log
+
+/oracle/admin/GENERIC/bin/admin/sqlplan
+
+ls -ltr|grep 'Dec '|awk '{print "gzip " $9}'
+
+ mv *.gz /export/TRACE_BKP_0103/
+
+aix1vf22
+aix1v019
+aix1vf56
+
+vi swapping the value:
+======================
+
+:%s/aix1vb09g/aix2vb09g/g
+
+Password reset servers.:
+=======================
+
+select * from all_errors where name='MERCURY_UTILS' 
+
+Servers aix1m001, aix-pci2-c,pci1-c, sp6c
+
+Baby$123
+
+select owner,object_name from dba_objects where object_name='TX_AUTHHOST_NEW';
+
+select owner,object_name from dba_objects where object_name='ZUORD_PFIR_PSTR';
+
+zuord_pfir_pstr
+
+tx_authhost_new
+
+select owner,object_name from dba_objects where owner='INTRANET_OWNER';
+ 
+Backup servers:
+
+aix1vf51
+aix1vf52
+
+END backup of Tablespace and datafiles:
+======================================
+
+https://dbabasis.wordpress.com/2011/02/01/script-check-and-take-tablespaces-from-backup-mode/
+
+To Check the TS in backup mode:
+===================================
+
+SELECT t.name AS "TB_NAME", b.status
+FROM V$DATAFILE d, V$TABLESPACE t, V$BACKUP b
+WHERE d.TS#=t.TS#
+AND b.FILE#=d.FILE#
+AND b.STATUS='ACTIVE';
+/
+
+
+Dynamic query to end backup
+===========================
+
+spool endbackup.sql
+
+SELECT 'ALTER TABLESPACE ' || t.name || ' END BACKUP;'
+FROM V$DATAFILE d, V$TABLESPACE t, V$BACKUP b
+WHERE d.TS#=t.TS#
+AND b.FILE#=d.FILE#
+AND b.STATUS='ACTIVE';
+
+
+To List datafiles in backup mode:
+
+set lines 300
+col NAME for a120
+select a.file#,
+       b.name,
+       decode(a.status,
+              'ACTIVE',
+              'In backup mode',
+              'NOT ACTIVE',
+              'Not in backup mode') as "backup mode"
+  from v$backup a, v$datafile b
+ where a.file# = b.file#
+/
+
+spool off
+
+TABLESPACE:
+===========
+
+
+select  a.TABLESPACE_NAME,
+         a.BYTES GB_total,
+         b.BYTES GB_free,
+         b.largest,
+         round(((a.BYTES-b.BYTES)/a.BYTES)*100,2) percent_used
+from
+         (
+                select  TABLESPACE_NAME,
+                        sum(BYTES)/1024/1024/1024 BYTES
+                from     dba_data_files
+                group   by TABLESPACE_NAME
+         )
+         a,
+         (
+                select  TABLESPACE_NAME,
+                        sum(BYTES)/1024/1024/1024 BYTES ,
+                        max(BYTES)/1024/1024/1024 largest
+                from     dba_free_space
+                group   by TABLESPACE_NAME
+         )
+         b
+where   a.TABLESPACE_NAME=b.TABLESPACE_NAME
+order   by ((a.BYTES-b.BYTES)/a.BYTES) desc;
+
+
+SET PAGESIZE 60
+SET LINESIZE 300
+col FILE_NAME for a80
+
+select file_name, bytes/1024/1024/1024, MAXBYTES/1024/1024/1024, AUTOEXTENSIBLE from dba_data_files where tablespace_name='&TBS';
+
+SET PAGESIZE 60
+SET LINESIZE 300
+col FILE_NAME for a80
+select file_name, bytes/1024/1024/1024, MAXBYTES/1024/1024/1024, AUTOEXTENSIBLE from dba_temp_files where tablespace_name='&TBS';
+
+ALTER DATABASE dataFILE '/oracle/admin/IOMMPM/dbf/sysaux/IOMMPM_sysaux_01.dbf' RESIZE 8G;
+
+ALTER DATABASE tempfile '/oracle/admin/FTMPRD/dbf/temp/FTMPRD_temp_03.dbf' RESIZE 15G;
+
+ALTER tablespace seelob add dataFILE '/oracle/admin/IOMMPM/dbf/seelob/IOMMPM_seelob_09.dbf' SIZE 15G;
+
+
+/oracle/admin/VTIPRD/dbf/vti_500m_idx
+
+
+TEMP TABLESPACE CHECK
+=====================
+
+SET PAGESIZE 60
+SET LINESIZE 300
+ 
+SELECT 
+   A.tablespace_name tablespace, 
+   D.gb_total,
+   SUM (A.used_blocks * D.block_size) / 1024 / 1024 /1024 gb_used,
+   D.gb_total - SUM (A.used_blocks * D.block_size) / 1024 / 1024 /1024 gb_free
+FROM 
+   v$sort_segment A,
+(
+SELECT 
+   B.name, 
+   C.block_size, 
+   SUM (C.bytes) / 1024 / 1024 /1024 gb_total
+FROM 
+   v$tablespace B, 
+   v$tempfile C
+WHERE 
+   B.ts#= C.ts#
+GROUP BY 
+   B.name, 
+   C.block_size
+) D
+WHERE 
+   A.tablespace_name = D.name
+GROUP by 
+   A.tablespace_name, 
+   D.gb_total;
+
+
+
+select  a.tablespace_name,
+b.used/1024/1024/1024 "USED (GB)",
+a.total/1024/1024/1024 "TOTAL (GB)",
+round(b.used/a.total*100,0) "USED (%)"
+from    (select tablespace_name, sum(greatest(maxbytes,bytes)) "TOTAL"
+from dba_data_files group by tablespace_name) a,
+(select tablespace_name,sum(bytes) "USED"
+from dba_segments group by tablespace_name) b,
+dba_tablespaces c
+where   a.tablespace_name=b.tablespace_name
+and    c.tablespace_name=b.tablespace_name
+and    c.status = 'ONLINE'
+and    round(b.used/a.total*100,0)>= 0
+---and a.tablespace_name='AMDBTS01_NEW' like '%UNDO%'
+order by 4 desc;
+
+
+PTLDEV> select USER#,PASSWORD from user$ where NAME='PORTAL_OWNER';
+
+     USER# PASSWORD
+---------- ----------
+        55 63A516E03A
+           99EF92
+
+
+ 
+ 0   
+
+
+TABLE SIZE;
+===========
+
+SELECT owner,
+segment_name,
+segment_type,
+tablespace_name,
+bytes/1024/1024 MB,
+initial_extent,
+next_extent,
+extents,
+pct_increase
+FROM
+DBA_SEGMENTS
+WHERE
+OWNER = 'PORTAL_OWNER' AND
+SEGMENT_TYPE = 'TABLE'
+/
+
+
+SELECT owner, segment_name, segment_type, bytes/1024/1024 MB,tablespace_name FROM
+DBA_SEGMENTS
+WHERE
+OWNER = 'PORTAL_OWNER' AND
+SEGMENT_TYPE = 'TABLE' order by bytes desc
+/
+
+
+col c1 format a15 heading 'snapshot|date' 
+col c2 format a25 heading 'table|name' 
+col c3 format 999,999,999 heading 'space|used|total'
+select 
+to_char(begin_interval_time,'yy/mm/dd hh24:mm')     c1,  
+
+    object_name      c2, 
+
+    space_used_total c3 
+
+from 
+
+    dba_hist_seg_stat       s, 
+
+    dba_hist_seg_stat_obj   o, 
+
+    dba_hist_snapshot       sn 
+
+where 
+
+    o.owner = 'SCHEMA_07' 
+
+and 
+
+    s.obj# = o.obj# 
+
+and 
+
+    sn.snap_id = s.snap_id  
+order by 
+
+    begin_interval_time; 
+
+EXPORT & IMPORT
+==================
+
+col OWNER for a15
+col DIRECTORY_NAME for a20
+col DIRECTORY_PATH for a70
+select OWNER,DIRECTORY_NAME,DIRECTORY_PATH from dba_directories;
+
+SELECT owner,sum(bytes)/1024/1024/1024 from dba_segments where owner='NSCALE_OWNER';
+
+select  
+   owner,
+   sum(bytes)/1024/1024/1024 schema_size_In_GB
+from 
+   dba_segments 
+group by 
+   owner;
+ 
+
+impdp directory=DMPTMP dumpfile=expdp_pcmdb01_d2_pcmtest1_11Oct16.dmp logfile=expdp_pcmdb01_d2_pcmtest1_11Oct16.dmp.log TRANSFORM=STORAGE:N,OID:N remap_schema=PCMTEST1:PCMTEST1 TABLE_EXISTS_ACTION=REPLACE
+
+impdp \'/ as sysdba\' directory=DATA_PUMP_DIR dumpfile=NW_expdp_full_gzip_APIPRD_271119_230005_%U.dmp logfile=expdp_full_gzip_APIPRD_271119_restore.log TABLE_EXISTS_ACTION=REPLACE exclude=STATISTICS PARALLEL=2
+
+impdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=NW_expdp_full_gzip_REPO_ETLMIG_210719_190000_%U.dmp logfile=impdp_ETLMIG_EXTRACT_OWNER_210719_restore.log schemas=LOAD_OWNER remap_schema=EXTRACT_OWNER:EXTRACT_AIDA remap_tablespace=EXTRACT:EXTRACT_AIDA exclude=STATISTICS PARALLEL=3
+
+
+impdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=ETLMIG_EXTRACT_LOAD_TRANS_%U.dmp logfile=impdp_ETLMIG_EXTRACT_OWNER_230719_restore.log schemas=LOAD_OWNER,EXTRACT_OWNER,TRANSFORM_OWNER remap_schema=LOAD_OWNER:LOAD_AIDA,EXTRACT_OWNER:EXTRACT_AIDA,TRANSFORM_OWNER:TRANSFORM_AIDA remap_tablespace=LOAD:LOAD_AIDA,EXTRACT:EXTRACT_AIDA,TRANSFORM:TRANSFORM_AIDA PARALLEL=3
+
+impdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=ETLMIG_EXTRACT_LOAD_TRANS_%U.dmp sqlfile=EXPORT_DATA:extract.sql
+
+impdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=ETLMIG_EXTRACT_LOAD_TRANS_%U.dmp Include=CONSTRAINT sqlfile=EXPORT_DATA:extract.sql 
+
+expdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=ETLMIG_EXTRACT_LOAD_TRANS_%U.dmp schemas=EXTRACT_OWNER,LOAD_OWNER,TRANSFORM_OWNER logfile=expdpETLMIG.log EXCLUDE=STATISTICS parallel=3 
+
+
+impdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=ETLMIG_EXTRACT_LOAD_TRANS_%U.dmp logfile=impdp_ETLMIG_EXTRACT_AIDA_230719_restore.log schemas=EXTRACT_OWNER remap_schema=EXTRACT_OWNER:EXTRACT_AIDA remap_tablespace=EXTRACT:EXTRACT_AIDA 
+
+
+
+impdp \'/ as sysdba\' directory=EXPORT_DATA dumpfile=ETLMIG_EXTRACT_LOAD_TRANS_%U.dmp logfile=impdp_ETLMIG_EXTRACT_AIDA_MDATA_230719_restore.log schemas=EXTRACT_OWNER content=META_DATA_ONLY remap_schema=EXTRACT_OWNER:EXTRACT_AIDA remap_tablespace=EXTRACT:EXTRACT_AIDA 
+
+
+impdp \'/ as sysdba\' directory=IMP_DIR DUMPFILE=NW_expdp_full_gzip_OPSPRD_180819_230003_%U.dmp SCHEMAS=EPROC PARALLEL=2 LOGFILE=impdp_full_gzip_OPSPRD_190819_230003.log exclude=STATISTICS
+
+
+expdp \'/ as sysdba\' dumpfile=EXPDP_ODSTST_Tables.dmp logfile=EXPDP_ODSTST_Tables.log directory=DATA_PUMP_DIR tables=MIS_OWNER.TMP_UPD_EUROPAY
+
+
+expdp \'/ as sysdba\' dumpfile=EXPDP_CONFLUENCE_OWNER.dmp logfile=EXPDP_CONFLUENCE_OWNER.log directory=DATA_PUMP_DIR schemas=CONFLUENCE_OWNER 
+
+
+expdp \'/ as sysdba\' dumpfile=EXPDP_EXTRACT_OWNER.dmp logfile=EXPDP_EXTRACT_OWNER.log directory=DATA_PUMP_DIR schemas=EXTRACT_OWNER 
+
+
+
+expdp \'/ as sysdba\' dumpfile=EXPDP_EXTRACT_OWNER_AIDA_WAVE1.dmp logfile=EXPDP_EXTRACT_OWNER.log directory=DATA_PUMP_DIR schemas=EXTRACT_OWNER
+expdp \'/ as sysdba\' dumpfile=EXPDP_LOAD_OWNER_AIDA_WAVE1.dmp logfile=EXPDP_LOAD_OWNER.log directory=DATA_PUMP_DIR schemas=LOAD_OWNER
+expdp \'/ as sysdba\' dumpfile=EXPDP_TRANSFORM_OWNER_AIDA_WAVE1.dmp logfile=EXPDP_TRANSFORM_OWNER.log directory=DATA_PUMP_DIR schemas=TRANSFORM_OWNER
+
+
+
+
+
+DYNAMIC
+========
+SET PAGES 9999 LINES 400
+
+SELECT 'ALTER TABLE ' || OWNER || '.' || TABLE_NAME || ' READ ONLY;'
+FROM DBA_TABLES
+WHERE OWNER IN ('LOAD_AIDA','EXTRACT_AIDA','TRANSFORM_AIDA')
+ORDER BY 1;
+
+
+SELECT owner_name, job_name, operation, job_mode, state
+ FROM dba_datapump_jobs;
+
+
+TO CHECK CONSTARINTS in column level:
+====================================
+
+SELECT cols.table_name, cols.column_name, cols.position, cons.status, cons.owner
+FROM all_constraints cons, all_cons_columns cols
+WHERE cols.table_name = 'Table Name'
+AND cons.constraint_type = 'P'
+AND cons.constraint_name = cols.constraint_name
+AND cons.owner = cols.owner
+ORDER BY cols.table_name, cols.position
+
+TO CHECK DATABASE SIZE:
+=======================
+
+select (select sum(bytes)/1024/1024/1024 from dba_data_files)+
+(select sum(bytes)/1024/1024/1024 from dba_temp_files) "Size in GB" from dual;
+
+TO CHECK EXPDP STATUS:
+======================
+
+set linesize 200
+set pagesize 200
+col owner_name format a12
+col job_name format a20
+col operation format a12
+col job_mode format a20
+SELECT 
+owner_name, 
+job_name, 
+operation, 
+job_mode, 
+state 
+FROM 
+dba_datapump_jobs
+where 
+state='EXECUTING';
+
+
+
+SELECT 
+OPNAME, 
+SID, 
+SERIAL#, 
+CONTEXT, 
+SOFAR, 
+TOTALWORK,
+    ROUND(SOFAR/TOTALWORK*100,2) "%_COMPLETE"
+FROM 
+V$SESSION_LONGOPS
+WHERE 
+OPNAME in
+(
+select 
+d.job_name
+from 
+v$session s, 
+v$process p, 
+dba_datapump_sessions d
+where 
+p.addr=s.paddr 
+and 
+s.saddr=d.saddr
+)
+AND 
+OPNAME NOT LIKE '%aggregate%'
+AND 
+TOTALWORK != 0
+AND 
+SOFAR <> TOTALWORK;
+
+
+TO CHECK IMPDP status:
+=======================
+
+
+SELECT sl.sid, sl.serial#, sl.sofar, sl.totalwork, dp.owner_name, dp.state, dp.job_mode
+     FROM v$session_longops sl, v$datapump_job dp
+     WHERE sl.opname = dp.job_name
+     AND sl.sofar != sl.totalwork;
+
+
+
+
+DATAGUARD SYNC CHECk
+=====================
+select max(sequence#) from v$log;
+
+select max(sequence#) from v$archived_log where applied='YES';
+select process,sequence#,status from v$managed_standby;
+
+
+impdp \'/ as sysdba\' 
+
+userid='/ as sysdba' 
+directory=EXPORT_DATA 
+dumpfile=NW_expdp_full_gzip_REPO_ETLMIG_210719_190000_%U.dmp 
+logfile=impdp_ETLMIG_EXTRACT_OWNER_210719_restore.log 
+remap_schema=EXTRACT_OWNER:EXTRACT_AIDA 
+remap_tablespace=EXTRACT:EXTRACT_AIDA 
+exclude=STATISTICS 
+PARALLEL=3
+
+G@nzT2ll
+
+SIZE OF SCHEMA:
+===============
+
+SELECT sum(bytes)/1024/1024/1024
+  FROM dba_segments
+ WHERE owner = 'RUI_KI_SYS';
+
+
+
+export PATH=$ORACLE_HOME/OPatch:$PATH
+
+opatch prereq CheckConflictAgainstOHWithDetail -ph ./
+
+/qcsprd/dbf1/Oracle_Home_Backup/software/patch/psu/12.1.0.2/OPatch/opatch apply
+
+opatch rollback -id <idnumber>
+
+opatch rollback -id 17799759
+
+/qcsprd/dbf1/Oracle_Home_Backup/software/patch/psu/12.1.0.2/OPatch/opatch lsinventory
+
+/crs/version2/11.2.0.4/OPatch/ocm/bin/emocmrsp no_banner -output /tmp/ocm.rsp
+
+
+/crs/version2/11.2.0.4/OPatch/opatch auto /software/11.2.0.4/SPU/2018_07/GI/27967757 -ocmrf /tmp/ocm.rsp
+
+/crs/version2/11.2.0.4/OPatch/opatch auto /software/11.2.0.4/SPU/2018_07/GI/27967757 -oh /crs/version2/11.2.0.4 -ocmrf /tmp/ocm.rsp
+
+
+$ORACLE_HOME/OPatch/opatch lsinventory -detail -oh $ORACLE_HOME
+
+opatch lsinventory -jre /oracle/12.1.0.2/OPatch/jdk
+
+
+opatch prereq CheckConflictAgainstOHWithDetail -ph ./ -jre /oracle/12.1.0.2/OPatch/jdk
+
+
+alter system set dg_broker_start=FALSE;
+ALTER DATABASE RECOVER MANAGED STANDBY DATABASE CANCEL;
+
+
+
+backup incremental from scn 31455366176 database format '/iomprd/export/inc%t.bak';
+
+
+select 
+  resource_name, 
+  current_utilization, 
+  max_utilization, 
+  limit_value
+from 
+  v$resource_limit
+where 
+  resource_name in ( 'sessions', 'processes');
+
+
+
+set pages 999
+
+ col c1 heading 'owner' format a15
+ col c2 heading 'name' format a40
+ col c3 heading 'type' format a10
+
+ 
+ select 
+    owner       c1, 
+    object_type c3,
+    object_name c2
+ from 
+    dba_objects 
+ where 
+    status != 'VALID'
+ order by
+    owner,
+    object_type; 
+
+
+SELECT SID, Serial#, UserName, Status, SchemaName, Logon_Time FROM V$Session WHERE Status='INACTIVE' AND UserName IS NOT NULL;
+
+set lines 200
+col USERNAME for a15
+col program for a40
+col terminal for a12
+col machine for a15
+col osuser for a15
+select sid,serial#,sql_id,username,status,program,to_char(logon_time,'dd-mm-yyyy HH24:MI:SS') logon_time,terminal,machine,osuser from v$session where username is not null  and status='INACTIVE';
+
+select sid,serial#,sql_id,username,status,program,to_char(logon_time,'dd-mm-yyyy HH24:MI:SS') logon_time,terminal,machine,osuser from v$session where username='EASYGO'  and status='INACTIVE';
+
+TO FIND PID from SID:
+=======================
+SELECT s.sid, s.serial#, s.username, s.osuser, p.spid, s.machine, p.terminal, s.program
+FROM v$session s, v$process p
+WHERE s.paddr = p.addr
+and s.sid =226;
+
+ARCHIVE GENERATION
+=========================
+
+
+Daily Archive Log Generation :
+
+select trunc(COMPLETION_TIME,'DD') Day, thread#, 
+round(sum(BLOCKS*BLOCK_SIZE)/1024/1024/1024) GB,
+count(*) Archives_Generated from v$archived_log 
+group by trunc(COMPLETION_TIME,'DD'),thread# order by 1;
+
+Hourly Archive Log Generation :
+
+set pages 1000
+alter session set nls_date_format = 'DD-MON-YYYY HH24:MI:SS';
+
+select trunc(COMPLETION_TIME,'HH') Hour,thread# , 
+round(sum(BLOCKS*BLOCK_SIZE)/1024/1024/1024) GB,
+count(*) Archives from v$archived_log 
+group by trunc(COMPLETION_TIME,'HH'),thread#  order by 1 ;
+
+
+Find transactions which are causing high archive log generation in oracle:
+==============================================================================
+
+
+SELECT s.sid, s.serial#, s.username, s.program, i.block_changes FROM 
+v$session s, v$sess_io i WHERE s.sid = i.sid ORDER BY 5 desc, 1, 2, 3, 4;
+
+SELECT s.sid, s.serial#, s.username, s.program,t.used_ublk, t.used_urec 
+FROM v$session s, v$transaction t WHERE s.taddr = t.addr 
+ORDER BY 5 desc, 6 desc, 1, 2, 3, 4;
+
+export PATH=$ORACLE_HOME/OPatch:$PATH
+
+$ORACLE_HOME/OPatch/opatch prereq CheckConflictAgainstOHWithDetail -ph /oracle/Software/12.1.0.2/psu/APR_2019/29141015
+
+
+
+ select OWNER,TABLE_NAME,TABLESPACE_NAME from dba_tables where table_name='BUCHUNGSSATZ';
+
+select owner,object_name from dba_objects where object_name='MA_EXEC_VIEWER_EXPORT';
+
+jbb.busa_grunddaten and jbb.buchungssatz.
+
+jbb.busa_grunddaten and jbb.buchungssatz.
+
+
+
+EASPRD TABLESPACE SIZE CHECK;
+============================
+set lines 300
+select OWNER,TABLE_NAME,TABLESPACE_NAME from dba_tables where TABLE_NAME='BUCHUNGSSATZ';
+
+OWNER                          TABLE_NAME                     TABLESPACE_NAME
+------------------------------ ------------------------------ ------------------------------
+JBB                            BUCHUNGSSATZ                   BUSA
+
+select OWNER,TABLE_NAME,TABLESPACE_NAME from dba_tables where TABLE_NAME='BUSA_GRUNDDATEN';
+
+OWNER                          TABLE_NAME                     TABLESPACE_NAME
+------------------------------ ------------------------------ ------------------------------
+JBB                            BUSA_GRUNDDATEN                BUSAGR
+
+
+busa_grunddaten
+
+TABLE_NAME       TABLESPACE_NAME        GB_TOTAL    GB_FREE    LARGEST   PERCENT_USED
+---------------  -------------------- ---------- ---------- ----------   ------------
+BUCHUNGSSATZ     BUSA                         15   8.0078125   8.0078125       46.61
+BUSA_GRUNDDATEN  BUSAGR                       12   6.8359375   6.8359375       43.03
+
+
+BUSA                                   15   8.203125   8.203125        45.31
+BUSAGR                                 12 6.93359375 6.93359375        42.22
+
+BUSA                                   15  8.0078125  8.0078125        46.61
+BUSAGR                                 12  6.8359375  6.8359375        43.03
+
+
+select * from
+(
+  select
+     opname,
+     start_time,
+     target,
+     sofar,
+     totalwork,
+     units,
+     elapsed_seconds,
+     message
+   from
+        v$session_longops
+  order by start_time desc
+)
+ where rownum <=1;
+
+
+select S.USERNAME, s.sid, s.osuser, t.sql_id, sql_text
+from v$sqltext_with_newlines t,V$SESSION s
+where t.address =s.sql_address
+and t.hash_value = s.sql_hash_value
+and s.status = 'ACTIVE'
+and s.username <> 'SYSTEM'
+order by s.sid,t.piece
+/
+
+
+
+TO CHEC REDO LOG DETAILS:
+
+col member format a50
+select GROUP#,TYPE,MEMBER from v$logfile;
+Locking
+========
+
+select
+  object_name, 
+  object_type, 
+  session_id, 
+  type,         -- Type or system/user lock
+  lmode,        -- lock mode in which session holds lock
+  request, 
+  block, 
+  ctime         -- Time since current mode was granted
+from
+  v$locked_object, all_objects, v$lock
+where
+  v$locked_object.object_id = all_objects.object_id AND
+  v$lock.id1 = all_objects.object_id AND
+  v$lock.sid = v$locked_object.session_id
+order by
+  session_id, ctime desc, object_name
+/
+
+
+***********************************************************************************************************************
+create database NSCPRD 
+    datafile '/qcsprd/dbf1/Oracle_Home_Backup/oradata/sys.dbf' size 500M 
+    sysaux datafile '/qcsprd/dbf1/Oracle_Home_Backup/oradata/sysaux.dbf' size 100m
+    undo tablespace undots 
+    datafile '/qcsprd/dbf1/Oracle_Home_Backup/oradata/undo.dbf' size 100m
+    default temporary tablespace temp
+    tempfile '/qcsprd/dbf1/Oracle_Home_Backup/oradata/tmp.dbf' size 100m
+    logfile
+            group 1 '/qcsprd/dbf1/Oracle_Home_Backup/oradata/log1.ora' size 50m,
+            group 2 '/qcsprd/dbf1/Oracle_Home_Backup/oradata/log2.ora' size 50m;
+
+
+
+
+export ORACLE_BASE=/qcsprd/dbf1/Oracle_Home_Backup/home
+ export ORACLE_HOME=/qcsprd/dbf1/Oracle_Home_Backup/home/11.2.0.4
+ export PATH=$ORACLE_HOME/bin:$PATH
+ export LD_LIBRARY_PATH=$ORACLE_HOME/lib
+ export ORACLE_SID=NSCPRD
+
+
+
+SQL> @$ORACLE_HOME/rdbms/admin/catalog.sql
+ SQL> @$ORACLE_HOME/rdbms/admin/catproc.sql
+ conn system/manager
+
+ SQL>@$ORACLE_HOME/sqlplus/admin/pupbld.sql
+
+ SQL> alter user system identified by manager;
+
+ User altered.
+
+orapwd file=$ORACLE_HOME/dbs/orapwtestdb password=Oracle entries=10
+*******************************************************************************************************************
+
+opatch prereq CheckConflictAgainstOHWithDetail -ph ./
+
+export PATH=$ORACLE_HOME/OPatch:$PATH
+
+
+cd $ORACLE_HOME/rdbms/admin
+sqlplus /nolog
+SQL> CONNECT / AS SYSDBA
+SQL> STARTUP
+SQL> @catbundle.sql psu apply
+SQL> QUIT
+
+
+
+
+DGMGRL> connect sys@AIDPRD.world
+Password:
+Connected.
+DGMGRL> show configuration
+
+
+orapwd file=orapwIOMSIT password=XZeX3_k7
+
+ln -s /oracle/admin/IOMSIT/pfile/orapwIOMSIT /oracle/12.1.0.2/dbs/orapwIOMSIT
+
+
+alter system set service_names="AIDSTB.WORLD" scope=both;
+
+
+select sid,serial#,username,osuser from v$session where username is not null;
+
+
+
+
+*******************************
+
+EASPET> select name, password,SPARE1, SPARE2, SPARE3,  SPARE4,SPARE5,SPARE6 from  user$ where name='XBOUND';
+
+NAME                           PASSWORD       SPARE1     SPARE2     SPARE3 SPARE4     SPARE5     SPARE6
+------------------------------ ---------- ---------- ---------- ---------- ---------- ---------- -------------------
+XBOUND                         D0DC188F5A          0
+                               A74A5A
+
+
+*******************************************
+To capture the login in formation in OS level
+
+cat /etc/syslog.conf
+
+
+/var/adm/ras/syslog.out
+
+***************************************************
+
+
+impdp directory=EXP_DUMP_IMP dumpfile=NW_TXNPRD_NEW_PARTITION_EXP_TXN_PART_ACT_211118_202001.dmp sqlfile=ddl_T_FPS_USER_BKP2.sql
+
+
+
+impdp directory=EXP_DUMP_IMP dumpfile=NW_TXNPRD_PARTIAL_EXP_TXN_TABS_211118_233004.dmp logfile=T_FPS_USER_BKP.log tables=TXN_OWNER.T_FPS_USER table_exists_action=APPEND remap_table=T_FPS_USER:T_FPS_USER_BKP 
+
+***********************************************************************************
+
+srvctl start instance -i PTLPRD2 -d PTLPRD
+
+/crs/11.2.0.4/bin/crsctl stop crs
+
+
+srvctl start instance -i CRSTST2 -d CRSTST
+
+
+srvctl start instance -i PTLTST2 -d PTLTST
+
+
+select plan_table_output from table(dbms_xplan.display_cursor('1356622895',null,'basic'));
+
+
+select plan_table_output from table(dbms_xplan.display_awr('a2hs2qxjuf463',null,'basic'));
+
+
+select plan_table_output from table(dbms_xplan.display_cursor('8xu2q6z0ryuxw',null,'basic'));
+
+8xu2q6z0ryuxw
+
+select sql_id, plan_hash_value, sql_text from v$sql where sql_id='';
+
+
+select plan_table_output from table(dbms_xplan.display_cursor('168h7jx92m09r',null,'basic'));
+
+************************************************************************************************************
+pass
+
+
+OPSDEV> select name,password from user$ where name='EPROC_USER';
+
+NAME                           PASSWORD
+------------------------------ ----------
+EPROC_USER                     AA25E21C5E
+                               B360AD
+
+
+OPSDEV> select name from v$database;
+
+NAME
+---------
+OPSDEV
+
+EASPET> select NAME,PASSWORD from user$ where name='LASG_INTRANET_ADM';
+
+NAME                           PASSWORD
+------------------------------ ----------
+LASG_INTRANET_ADM              B1DD8D523B
+                               616CB7
+
+
+
+
+
+SQL> select name,password from user$ where name='EPROC_USER';
+
+NAME                           PASSWORD
+------------------------------ ------------------------------
+EPROC_USER                     AA25E21C5EB360AD
+
+SQL> select name from v$database;
+
+NAME
+---------
+OPSPRD
+
+
+select /*+ ordered */ w1.sid  waiting_session,h1.sid  holding_session,w.kgllktype lock_or_pin,w.kgllkhdl address,decode(h.kgllkmod,  0, 'None', 1, 'Null', 2, 'Share', 3, 'Exclusive','Unknown') mode_held,decode(w.kgllkreq,  0, 'None', 1, 'Null', 2, 'Share', 3, 'Exclusive','Unknown') mode_requestedfrom dba_kgllock w, dba_kgllock h, v$session w1, v$session h1 where (((h.kgllkmod != 0) and (h.kgllkmod != 1) and ((h.kgllkreq = 0) or (h.kgllkreq = 1))) and (((w.kgllkmod = 0) or (w.kgllkmod= 1)) and ((w.kgllkreq != 0) and (w.kgllkreq != 1)))) and  w.kgllktype=h.kgllktype and  w.kgllkhdl=h.kgllkhdl and  w.kgllkuse=w1.saddr and  h.kgllkuse=h1.saddr;
+
+
+
+
+Hence I would like to ask you the following questions:
+* at what time of the day are the backups running (please incl. timezone)
+OFF Hours
+* how long are the backups currently kept
+14 days networker later on Tape for 30 days
+
+* who is to be contacted / responsible if a recovery from a backup (e.g. after an incident) needs to be urgently deployed
+Depends upon backup PCI - Networker Non-PCI - export Backup
+ 
+For PCI we have to contact backup team/ Storage and UNIX team
+
+For Non PCI DBA team will perform.
+
+
+* is only a full recovery possible or also a partial recovery (e.g. specific tables)
+
+Only full DB recovery is possible. We cannot perform recovery of a specific table.
+
+
+* is a recovery possible only for the specific time of backup or "any" point in time
+
+Point time recovery is possible. Provided we have required archive log. 
+
+
+impdp DIRECTORY=EXP_DIR DUMPFILE=NW_expdp_full_gzip_IOMMPM_150319_100000_%U.dmp FULL=Y PARALLEL=2 LOGFILE=impdp_full_gzip_IOMMPM_150319_100000.log TABLE_EXISTS_ACTION=TRUNCATE 
+
+
+expdp DIRECTORY=DATA_PUMP_DIR DUMPFILE=expdp_crucible_owner_180419.dmp schemas=CRUCIBLE_OWNER logfile=expdp_crucible_owner_180419.log exclude=STATISTICS

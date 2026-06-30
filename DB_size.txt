@@ -1,0 +1,106 @@
+TO CHECK DATABASE SIZE:
+=======================
+
+select (select sum(bytes)/1024/1024/1024 from dba_data_files)+
+(select sum(bytes)/1024/1024/1024 from dba_temp_files) "Size in GB" from dual;
+
+set linesize 150
+set pagesize 5000
+col owner for a25
+col segment_name for a30
+col segment_type for a20
+col TABLESPACE_NAME for a30
+clear breaks
+clear computes
+compute sum of SIZE_IN_GB on report
+break on report
+select OWNER,sum(bytes)/1024/1024/1000 "SIZE_IN_GB" from dba_segments group by owner order by owner;
+
+OWNER                SIZE_IN_GB
+-------------------- ----------
+APPQOSSYS              .0003125
+AUDSYS                 .0004375
+CS2                  5295.88895
+DBSFWUSER               .000375
+DBSNMP                 .0031875
+GSMADMIN_INTERNAL      .0061875
+ORACLE                    1.493
+OUTLN                  .0005625
+RUI_KI_SYS               13.675
+RUI_SYS                   13.54
+SYNCRO                      .15
+SYS                  20.8733125
+SYSTEM                   .09725
+TAX_STRG                    .01
+TXE_SYS              1426.45174
+XDB                    .0448125
+                     ----------
+sum                  6772.23513
+
+16 rows selected.
+
+select owner,sum(bytes)/1024/1024/1024 as "Size in GB" from dba_segments group by owner;
+
+select segment_name, bytes/1024/1024/1024 "SIZE_IN_GB" from dba_segments where segment_type='TABLE PARTITION' and owner='CS2' group by segment_name;
+
+and segment_name='<TABLE_NAME>';
+round(SUM(BYTES)/power(2,20)) SEGMENT_SIZE_MB
+select segment_name,segment_type, bytes/1024/1024/1024 "SIZE_IN_GB" from dba_segments where segment_type='TABLE PARTITION' and owner='CS2'; group by segment_name;
+
+select table_name,segment_name, sum(bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments and dba_indexes where segment_type='INDEX' and owner='CS2' group by segment_name;  
+ 
+select segment_name, sum(bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments where segment_type='INDEX' and owner='TXE_SYS'; 
+
+select segment_name, sum(bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments where owner='TXE_SYS' and segment_type='TABLE' and segment_name like 'TEA_%' group by segment_name order by segment_name;
+
+SELECT idx.table_name, idx.index_name, SUM(bytes)/1024/1024 MB
+  FROM dba_segments seg,
+       dba_indexes idx
+  WHERE idx.table_owner = 'CS2'
+      GROUP BY idx.index_name, idx.table_name;
+	  
+select a.segment_name, b.table_name, sum(a.bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments a, dba_indexes b where a.owner='CS2' and a.segment_type='TABLE' and a.segment_name like 'CSFE0020%' and a.segment_name=b.index_name group by segment_name order by 2,1;
+	  
+select a.segment_name, b.table_name, sum(a.bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments a, dba_indexes b where a.owner='TXE_SYS' and a.segment_type='TABLE' and a.segment_name like 'TXE_%' and a.segment_name=b.index_name group by a.segment_name, b.table_name order by 2,1;
+
+select a.segment_name, b.table_name, sum(a.bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments a, dba_indexes b where a.owner='TXE_SYS' and a.segment_type='TABLE' and a.segment_name like 'TXE_%' and a.segment_name=b.index_name group by a.segment_name, b.table_name order by 2,1;
+
+select a.segment_name, b.table_name, sum(a.bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments a, dba_indexes b where a.owner='CS2' and a.segment_type='TABLE PARTITION and b.table_name='CSF40020' and a.segment_name=b.index_name group by a.segment_name, b.table_name order by 2,1;
+
+select a.segment_name, b.table_name, sum(a.bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments a, dba_indexes b where a.owner='CS2' and a.segment_type='INDEX' and a.segment_name=b.index_name group by a.segment_name, b.table_name order by 2,1;
+
+
+select segment_name, sum(bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments where segment_type='INDEX' and owner='TXE_SYS' group by segment_name;
+
+select a.segment_name,sum(a.bytes)/1024/1024/1024 "SIZE_IN_GB" from dba_segments a, dba_indexes b where a.owner='TXE_SYS' and a.segment_type='TABLE' and a.segment_name like 'TXE_%' and a.segment_name=b.index_name group by a.segment_name order by 2,1;
+
+select owner,segment_name,segment_type, sum(bytes/1024/1024/1024) GB from dba_segments where segment_name='TXE_TRAN_ZI_CONTAINER' group by owner,segment_name,segment_type; 
+
+select owner,segment_name,segment_type,partition_name,sum(bytes/1024/1024/1024) GB from dba_segments where partition_name like 'TRAN_ZI%' group by owner,segment_name,segment_type,partition_name;
+TXE_TRAN_ZI_CONTAINER
+select owner, object_name, subobject_name, object_type from dba_objects where  object_name='TXE_TRAN_ZI_CONTAINER';
+OWNER                SEGMENT_NAME              SEGMENT_TYPE                 GB
+-------------------- ------------------------- -------------------- ----------
+CS2                  CSFE0020                  TABLE PARTITION      793.083984
+CS2                  CSFE3020                  TABLE                        76
+CS2                  CSFE4020                  TABLE                       192
+TXE_SYS              TXE_TRAN                  TABLE                88.8671875
+
+OWNER           OBJECT_NAME               SUBOBJECT_NAME       OBJECT_TYPE
+--------------- ------------------------- -------------------- -----------------------
+TXE_SYS         TXE_TRAN_ZI_CONTAINER     TRAN_ZI_P01          TABLE PARTITION
+TXE_SYS         TXE_TRAN_ZI_CONTAINER     TRAN_ZI_P100         TABLE PARTITION
+TXE_SYS         TXE_TRAN_ZI_CONTAINER     TRAN_ZI_P99          TABLE PARTITION
+TXE_SYS         TXE_TRAN_ZI_CONTAINER                          TABLE
+
+OWNER           SEGMENT_NAME              SEGMENT_TYPE              PARTITION_NAME               GB
+--------------- ------------------------- ------------------------- -------------------- ----------
+TXE_SYS         TXE_TRZI_PRK              INDEX PARTITION           TRAN_ZI_P01          .107421875
+TXE_SYS         TXE_TRZI_PRK              INDEX PARTITION           TRAN_ZI_P99                   9
+TXE_SYS         TXE_TRZI_PRK              INDEX PARTITION           TRAN_ZI_P100                342
+
+
+select owner,segment_name,segment_type,sum(bytes/1024/1024/1024) Table_Size_GB from dba_segments where owner='CS2' and segment_name='CSFE0020';
+
+
+

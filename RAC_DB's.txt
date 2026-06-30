@@ -1,0 +1,504 @@
+
+*********
+First stop instance
+then STOP CRS
+
+CRS will automatically starts
+start the instance and validate the listener.
+******
+Check processes for binary paths used:
+
+ps -ef | egrep "ora\.pmon|crsd|cssd|ocssd|tnslsnr|asm_pmon|ora\.smon" | grep -v egrep
+
+/g01/app/grid/oracle19c/bin
+./crsctl query crs activeversion
+Oracle Clusterware active version on the cluster is [19.0.0.0.0]
+pwd
+/g01/app/grid/oracle19c/bin
+./crsctl stat res -t
+./crsctl check crs
+
+ps -ef | egrep 'crsd|ocssd|ora.cssd' | grep -v egrep
+
+ASM:
+====
+[grid@e75lrl1054 bin]$ . oraenv
+ORACLE_SID = [grid] ? +ASM1
+The Oracle base has been set to /g01/app/grid_base
+[grid@e75lrl1054 bin]$ sqlplus / as sysasm
+
+select name,state, total_mb, free_mb from v$asm_diskgroup;
+
+set lines 300 long 9999999 pages 300
+select group_number, name, path from v$asm_disk;
+
+asmcmd lsdg # Lists ASM diskgroups
+asmcmd lsid # List ASM instance details
+asmcmd cd +DATA 
+asmcmd ls -lt #List files in the diskgroup
+asmcmd lsdsk  # to see ASM disk groups
+
+as root:
+pvdisplay
+lsblk
+/etc/udev/rules.d/ --> ASM disk rules if any
+
+LISTENER DETAILS:
+=================
+ps -ef|grep tnslsnr | grep -v grep
+
+as grid user:
+ls -l $(which tnslsnr) || true
+
+find /u01 -type f -name listener.ora 
+
+srvctl status scan_listener
+srvctl config scan_listener
+srvctl status listener -n node1
+srvctl status listener -n node2
+
+OCR and VOTING FILES:
+===============
+. oraenv
++ASM1
+
+crsctl query css votedisk  #lists voting disks
+ocrcheck                   #shows ocr location and health
+ocrdump /tmp/ocr.dump      #dumps ocr content to files
+
+crsctl stat res -t | egrep -i 'OCR|VOTE'
+
+VIP's and SCAN IP's:
+
+srvctl status vip -n node1
+srvctl config scan   #PRINTS SCAN NAMES + IP's
+olsnodes -n
+hostname -i
+ip addr show
+
+ARCHIVE LOGS AND REDO:
+select dest_name, status, destination from v$archive_dest;
+select name,value from v$parameter where name like '%log_archive%';
+select group#,member, type from v$logfile;
+
+TABLESPACE reflection to standby:
+v$managed_standby
+v$recover_file
+
+SHOW PARAMETER  STANDBY_FILE_MANAGEMENT  -->  AUTO - will create new datafile automatically in standby
+
+alter tablespace users add datafile '+DATA' size 10G;
+
+SELECT file#, name, tablespace_name from dba_data_files;
+
+On standby, we can monitor:
+select sequence#, applied from v$archived_log order by sequence#;
+
+select dest_id, status, destination, target from v$archive_dest;
+
+on standby:
+select process, status, client_processes from v$managed_standby;
+select thread#, sequence#, applied from v$archived_log order by sequence#;
+
+GOLDENGATE REPLICATION:
+=======================
+
+cd /gghome/app/product/ogg19c/
+./ggsci
+
+info all
+status manager 
+view report <process>
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PTLTST1:
+PTLTST1:aix1vb09:/crs/19.3.0.0/bin > ps -ef|grep tns
+  oracle 18284602        1   0   Sep 14      -  9:55 /oracle/19.3.0.0/bin/tnslsnr LISTENER_PTLTST1_1 -inherit
+  oracle 23199848 16318520   0 10:38:24  pts/1  0:00 grep tns
+PTLTST1:aix1vb09:/crs/19.3.0.0/bin > ps -ef|grep pmon
+  oracle  7536690 16318520   0 10:39:53  pts/1  0:00 grep pmon
+  oracle 55377936        1   0   Sep 14      -  1:34 ora_pmon_PTLTST1
+BEFORE STOPPING CRS:
+PTLTST1:aix1vb09:/crs/19.3.0.0/bin > crsctl check crs
+CRS-4638: Oracle High Availability Services is online
+CRS-4537: Cluster Ready Services is online
+CRS-4529: Cluster Synchronization Services is online
+CRS-4533: Event Manager is online
+srvctl stop listener -l LISTENER_PTLTST1_1 -n aix1vb09
+srvctl stop listener -l LISTENER_PTLTST2_1 -n aix2vb09
+srvctl status listener -l LISTENER_PTLTST2_1 -n aix2vb09
+srvctl start listener -l LISTENER_PTLTST1_1 -n aix1vb09
+srvctl start instance -d PTLTST -i PTLTST2
+srvctl start instance -d PTLTST -i PTLTST1
+srvctl stop instance -d PTLTST -i  PTLTST1 
+srvctl stop instance -d PTLTST -i  PTLTST2
+srvctl status instance -d PTLTST -i  PTLTST1
+
+srvctl enable listener -l LISTENER_PTLTST2_1 -n aix2vb09
+srvctl enable listener -l LISTENER_PTLTST1_1 -n aix1vb09
+
+srvctl start instance -d PTLPRD -i PTLPRD1 
+
+/crs/19.3.0.0/bin/crsctl stop crs
+
+/crs/19.3.0.0/bin/crsctl start crs
+
+echo $GRID_HOME/bin - to find grid home
+AFTER STOPPING CRS
+PTLTST1:aix1vb09:/crs/19.3.0.0/bin > crsctl check crs
+CRS-4639: Could not contact Oracle High Availability Services
+
+PTLTST1:aix1vb09:/oracle > df -g
+Filesystem    GB blocks      Free %Used    Iused %Iused Mounted on
+/dev/hd4           0.56      0.46   18%     6080     6% /
+/dev/hd2           5.06      2.47   52%    50395     8% /usr
+/dev/hd9var        1.00      0.49   52%     1239     2% /var
+/dev/hd3           6.00      4.99   17%     1074     1% /tmp
+/dev/hd1           1.25      0.37   71%     3360     4% /home
+/proc                 -         -    -        -      - /proc
+/dev/hd10opt       0.31      0.09   73%     2393    10% /opt
+/dev/livedump      0.25      0.25    1%        4     1% /var/adm/ras/livedump
+/dev/lv_iostat      2.56      0.61   77%     3853     3% /iostat
+/dev/lv_usr_local      0.25      0.23    9%      387     1% /usr/local
+/dev/lv_oracle     13.50      3.75   73%    18887     2% /oracle
+/dev/lv_crs       35.00      6.29   83%    16447     2% /crs/11.2
+/dev/lv_oracle11204     20.00     10.23   49%    46558     2% /oracle/11.2.0.4
+/dev/fslv00       65.00     35.34   46%    84471     2% /crs/11.2.0.4
+/dev/hd11admin      2.00      1.47   27%       37     1% /admin
+/dev/lv_oracle_em      4.00      2.16   46%    12857     3% /oracle/em
+/dev/lv_ptltst_exp    370.00    178.44   52%   103029     1% /export
+/dev/lv_oracle19300     34.38     17.27   50%    35689     1% /oracle/19.3.0.0
+/dev/lv_crs19300     79.38     55.29   31%    32433     1% /crs/19.3.0.0
+/dev/admin         1.00      0.88   13%     4084     4% /ptltst/admin
+/dev/dbf1        300.00     85.98   72%     4038     4% /ptltst/dbf1
+/dev/dbf2        300.00     84.41   72%     4038     4% /ptltst/dbf2
+/dev/dbf3        300.00     56.72   82%     4036     4% /ptltst/dbf3
+/dev/dbf4        300.00     60.22   80%     4033     4% /ptltst/dbf4
+/dev/diag         11.00     10.07    9%     5614     5% /ptltst/diag
+/dev/import       10.00      7.02   30%    69873    54% /import
+/dev/ocr1          1.00      0.92    8%     4012     7% /ptltst/ocr1
+/dev/ocr2          1.00      0.79   21%     4023     7% /ptltst/ocr2
+/dev/ocr3          1.00      0.92    8%     4012     7% /ptltst/ocr3
+/dev/redolog      50.00     44.84   11%    10269    16% /ptltst/redolog
+/dev/redologcp     30.00      6.01   80%    37017    57% /ptltst/redologcp
+/dev/vot1          1.00      0.92    9%     4012     7% /ptltst/vot1
+/dev/vot2          1.00      0.92    9%     4012     7% /ptltst/vot2
+/dev/vot3          1.00      0.92    9%     4012     7% /ptltst/vot3
+
+PTLTST2:
+*******
+PTLTST2:aix2vb09:/oracle > ps -ef|grep tns
+  oracle 26148942        1   0   Nov 03      -  0:33 /oracle/19.3.0.0/bin/tnslsnr LISTENER_PTLTST2_1 -inherit
+  oracle 30277880 27459598   1 07:45:58  pts/1  0:00 grep tns
+PTLTST2:aix2vb09:/oracle > ps -ef|grep pmon
+  oracle  9699574        1   0   Nov 02      -  0:05 ora_pmon_PTLTST2
+  oracle 29163668 27459598   1 07:46:07  pts/1  0:00 grep pmon
+BEFORE STOPPING CRS:
+PTLTST2:aix2vb09:/oracle > crsctl check crs
+CRS-4638: Oracle High Availability Services is online
+CRS-4537: Cluster Ready Services is online
+CRS-4529: Cluster Synchronization Services is online
+CRS-4533: Event Manager is online
+srvctl stop listener -l LISTENER_PTLTST2_1 -n aix2vb09
+srvctl start listener -l LISTENER_PTLTST2_1 -n aix2vb09
+srvctl status listener -l LISTENER_PTLTST2_1 -n aix2vb09
+srvctl status instance -d PTLTST -i PTLTST2
+PTLTST2:aix2vb09:/oracle > srvctl status instance -d PTLTST -i PTLTST2
+Instance PTLTST2 is running on node aix2vb09
+
+srvctl stop instance -d PTLTST -i PTLTST2 
+srvctl start instance -d PTLTST -i PTLTST2
+
+PTLTST2:aix2vb09:/crs/19.3.0.0/bin > srvctl status instance -d PTLTST -i PTLTST2
+Instance PTLTST2 is not running on node aix2vb09
+
+We have stopped the instance in PTLTST2. As this is a RAC (CLUSTER) environment,  Kindly stop the CRS as mentioned below and let us know.
+
+/crs/19.3.0.0/bin/crsctl stop crs
+echo $GRID_HOME/bin - to find grid home
+AFTER STOPPING CRS:::
+PTLTST2:aix2vb09:/crs/19.3.0.0/bin > crsctl check crs
+CRS-4639: Could not contact Oracle High Availability Services
+
+Then i have manually stopped the listener as well.
+AFTER ACTIVITY:
+PTLTST2:aix2vb09:/oracle > crsctl check crs
+CRS-4638: Oracle High Availability Services is online
+CRS-4537: Cluster Ready Services is online
+CRS-4529: Cluster Synchronization Services is online
+CRS-4533: Event Manager is online
+
+PTLTST2:aix2vb09:/oracle > df -g
+Filesystem    GB blocks      Free %Used    Iused %Iused Mounted on
+/dev/hd4           0.56      0.47   18%     6001     5% /
+/dev/hd2           4.44      1.87   58%    50373    10% /usr
+/dev/hd9var        1.00      0.57   44%     1191     1% /var
+/dev/hd3           6.31      4.88   23%     1304     1% /tmp
+/dev/hd1           0.50      0.16   68%      486     2% /home
+/proc                 -         -    -        -      - /proc
+/dev/hd10opt       0.31      0.09   73%     2393    10% /opt
+/dev/livedump      0.25      0.25    1%        4     1% /var/adm/ras/livedump
+/dev/lv_iostat      3.75      2.01   47%     3892     1% /iostat
+/dev/lv_usr_local      0.25      0.23   10%      278     1% /usr/local
+/dev/lv_oracle     13.75      3.40   76%   179305    18% /oracle
+/dev/lv_crs       35.00      6.29   83%    16302     2% /crs/11.2
+/dev/lv_crs11204     65.00     28.03   57%    20130     1% /crs/11.2.0.4
+/dev/lv_oracle11204     20.00     10.50   48%    46756     2% /oracle/11.2.0.4
+/dev/hd11admin      2.00      1.72   14%       34     1% /admin
+/dev/lv_oracle_em      4.00      1.45   64%    12931     4% /oracle/em
+/dev/lv_ptltst_exp    370.00    173.44   54%   321000     1% /export
+/dev/lv_oracle19300     34.38     16.92   51%    35604     1% /oracle/19.3.0.0
+/dev/lv_crs19300     79.38     55.12   31%    31321     1% /crs/19.3.0.0
+/dev/dbf1        300.00     85.98   72%     4038     4% /ptltst/dbf1
+/dev/dbf2        300.00     84.41   72%     4038     4% /ptltst/dbf2
+/dev/dbf3        300.00     56.72   82%     4036     4% /ptltst/dbf3
+/dev/dbf4        300.00     60.22   80%     4033     4% /ptltst/dbf4
+/dev/diag         11.00     10.07    9%     5614     5% /ptltst/diag
+/dev/import       10.00      7.02   30%    69873    54% /import
+/dev/ocr1          1.00      0.92    8%     4012     7% /ptltst/ocr1
+/dev/ocr2          1.00      0.79   21%     4023     7% /ptltst/ocr2
+/dev/ocr3          1.00      0.92    8%     4012     7% /ptltst/ocr3
+/dev/redolog      50.00     44.84   11%    10269    16% /ptltst/redolog
+/dev/redologcp     30.00      6.01   80%    37017    57% /ptltst/redologcp
+/dev/vot1          1.00      0.92    9%     4012     7% /ptltst/vot1
+/dev/vot2          1.00      0.92    9%     4012     7% /ptltst/vot2
+/dev/vot3          1.00      0.92    9%     4012     7% /ptltst/vot3
+/dev/admin         1.00      0.88   13%     4084     4% /ptltst/admin
+
+PTLPRD1:
+PTLPRD1:aix1vb01:/oracle > ps -ef|grep tns
+  oracle  8650790        1   0   Jul 24      -  1:34 /crs/11.2.0.4/bin/tnslsnr LISTENER_SCAN2 -inherit
+  oracle 10092598        1   0   Jul 24      -  1:33 /crs/11.2.0.4/bin/tnslsnr LISTENER_SCAN3 -inherit
+  oracle 27263166        1   0   Sep 26      -  3:15 /crs/11.2.0.4/bin/tnslsnr LISTENER_PTLPRD1_1 -inherit
+  oracle 38142204 44040260   0 07:46:45  pts/0  0:00 grep tns
+PTLPRD1:aix1vb01:/oracle > ps -ef|grep pmon
+  oracle  9830484        1   0   Jul 24      - 25:39 ora_pmon_PTLPRD1
+BEFORE STOPPING CRS:
+PTLPRD1:aix1vb01:/oracle > crsctl check crs
+CRS-4638: Oracle High Availability Services is online
+CRS-4537: Cluster Ready Services is online
+CRS-4529: Cluster Synchronization Services is online
+CRS-4533: Event Manager is online
+***********************************************************************************************************
+First stop instance
+then STOP CRS
+
+CRS will automatically starts
+start the instance and validate the listener.
+***********************************************************************************************************
+srvctl stop listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl start listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl status listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl status instance -d PTLPRD -i PTLPRD1
+srvctl status instance -d PTLPRD -i PTLPRD1
+srvctl stop instance -d PTLPRD -i PTLPRD1 
+
+srvctl enable listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl disable listener -l LISTENER_PTLPRD2_1 -n aix1vb01
+srvctl stop listener -l LISTENER_PTLPRD2_1 -n aix1vb01
+
+srvctl start instance -d PTLPRD -i PTLPRD1 
+
+/crs/19.3.0.0/bin/crsctl stop crs
+
+echo $GRID_HOME/bin - to find grid home
+PTLPRD1:aix1vb01:/oracle > echo $GRID_HOME/bin
+/crs/19.3.0.0/bin
+AFTER STOPPING CRS
+PTLTST1:aix1vb09:/crs/19.3.0.0/bin > crsctl check crs
+CRS-4639: Could not contact Oracle High Availability Services
+
+PTLPRD1:aix1vb01:/oracle > srvctl status instance -d PTLPRD -i PTLPRD1
+Instance PTLPRD1 is running on node aix1vb01
+
+Hi Chethan,
+
+We have stopped the instance in aix1vb01(PTLPRD1). As this is a RAC (CLUSTER) environment,  Kindly stop the CRS as mentioned below and let us know.
+
+/crs/11.2.0.4/bin/crsctl stop crs
+
+PTLSBD:aix1vb03:/oracle > ps -ef|grep tns
+  oracle 15859782 16449648   0 11:38:27  pts/2  0:00 grep tns
+  oracle 23986250        1   0   Jun 30      -  0:39 /oracle/11.2.0.4/bin/tnslsnr LISTENER_PTLSBD_1 -inherit
+PTLSBD:aix1vb03:/oracle > ps -ef|grep pmon
+  oracle 21692628        1   0   Jul 24      - 13:26 ora_pmon_PTLSBD
+
+PTLPRD2:
+PTLPRD2:aix2vb01:/oracle > ps -ef|grep tns
+  oracle 11469038        1   0   Nov 24      -  0:00 /crs/11.2.0.4/bin/tnslsnr LISTENER_SCAN3 -inherit
+  oracle 15007818        1   0   Nov 07      -  1:28 /crs/11.2.0.4/bin/tnslsnr LISTENER_PTLPRD2_1 -inherit
+  oracle 29229084 33292362   0 08:58:34  pts/0  0:00 grep tns
+  oracle 58327086        1   0   Nov 24      -  0:00 /crs/11.2.0.4/bin/tnslsnr LISTENER_SCAN2 -inherit
+PTLPRD2:aix2vb01:/oracle > ps -ef|grep pmon
+  oracle  9568316        1   0   Sep 07      - 24:56 ora_pmon_PTLPRD2
+  oracle 37158914 33292362   0 08:58:38  pts/0  0:00 grep pmon
+*********
+First stop instance
+then STOP CRS
+
+CRS will automatically starts
+start the instance and validate the listener.
+******
+BEFORE STOPPING CRS:
+PTLPRD2:aix2vb01:/oracle > crsctl check crs
+CRS-4638: Oracle High Availability Services is online
+CRS-4537: Cluster Ready Services is online
+CRS-4529: Cluster Synchronization Services is online
+CRS-4533: Event Manager is online
+
+srvctl stop listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl start listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl status listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+
+srvctl status instance -d PTLPRD -i PTLPRD2
+srvctl status instance -d PTLPRD -i PTLPRD2
+srvctl stop instance -d PTLPRD -i PTLPRD2
+srvctl start instance -d PTLPRD -i PTLPRD2 
+
+srvctl enable listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+srvctl disable listener -l LISTENER_PTLPRD1_1 -n aix1vb01
+
+PTLPRD2:aix2vb01:/oracle > srvctl status instance -d PTLPRD -i PTLPRD2
+Instance PTLPRD2 is running on node aix2vb01
+
+/crs/19.3.0.0/bin/crsctl stop crs
+
+echo $GRID_HOME/bin - to find grid home
+PTLPRD2:aix2vb01:/oracle > echo $GRID_HOME/bin
+/crs/19.3.0.0/bin
+
+AFTER STOPPING CRS
+PTLTST1:aix1vb09:/crs/19.3.0.0/bin > crsctl check crs
+CRS-4639: Could not contact Oracle High Availability Services
+
+PTLPRD1:aix1vb01:/oracle > srvctl status instance -d PTLPRD -i PTLPRD1
+Instance PTLPRD1 is running on node aix1vb01
+
+Hi Chethan,
+
+We have stopped the instance in aix2vb01(PTLPRD2). As this is a RAC (CLUSTER) environment,  Kindly stop the CRS as mentioned below and let us know.
+
+/crs/11.2.0.4/bin/crsctl stop crs
+PTLSBD:aix1vb03:/oracle > ps -ef|grep tns
+  oracle 47513804        1   0   Jun 11      -  0:01 /oracle/19.3.0.0/bin/tnslsnr LISTENER_PTLSBD_1 -inherit
+PTLSBD:aix1vb03:/oracle > ps -ef|grep pmon
+  oracle 32833606        1   0   Jun 11      -  0:32 ora_pmon_PTLSBD
+
+PTLPRD1:aix2vb03:/oracle > ps -ef|grep tns
+  oracle 13893820        1   0   Jun 30      -  0:47 /oracle/11.2.0.4/bin/tnslsnr LISTENER_PTLSBM_1 -inherit
+  oracle 41812162 45482006   1 11:15:48  pts/1  0:00 grep tns
+PTLPRD1:aix2vb03:/oracle > ps -ef|grep pmon
+  oracle 23134300        1   0   Jul 24      - 17:52 ora_pmon_PTLPRD1
+  oracle 41812164 45482006   1 11:15:51  pts/1  0:00 grep pmon
+DGMGRL> show configuration;
+
+Configuration - portal_dg
+
+  Protection Mode: MaxPerformance
+  Members:
+  ptlprd - Primary database
+    ptlsbd - Physical standby database
+    ptlsbm - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+SUCCESS   (status updated 56 seconds ago)
+
+Filesystem    GB blocks      Free %Used    Iused %Iused Mounted on
+/dev/hd4           0.56      0.45   21%     6661     6% /
+/dev/hd2           3.88      1.26   68%    52044    13% /usr
+/dev/hd9var        1.50      0.53   65%     1335     2% /var
+/dev/hd3           8.00      1.76   78%     1849     1% /tmp
+/dev/hd1           0.75      0.31   59%     1030     2% /home
+/dev/hd11admin      0.50      0.18   65%       63     1% /admin
+/proc                 -         -    -        -      - /proc
+/dev/hd10opt       0.25      0.08   70%     2222    10% /opt
+/dev/livedump      0.25      0.25    1%        4     1% /var/adm/ras/livedump
+/dev/lv_iostat      3.00      0.17   95%     4539    10% /iostat
+/dev/lv_usr_local      0.25      0.18   28%      587     2% /usr/local
+/dev/lv_oracle     21.50     11.55   47%    46304     2% /oracle
+/dev/lv_oracle11202     25.00      8.33   67%    41758     3% /oracle/11.2.0.2
+/dev/lv_crs       35.00      5.98   83%    16559     2% /crs/11.2
+/dev/lv_ptlprd_exp    498.00    461.98    8%     4885     1% /export
+/dev/lv_oracle11204     23.00     14.07   39%    51351     2% /oracle/11.2.0.4
+/dev/lv_crs11204     40.00     10.82   73%    28728     2% /crs/11.2.0.4
+/dev/lv_oracle_em      3.00      3.00    1%        4     1% /oracle/em
+/dev/lv_oracle19300     34.38     16.89   51%    35655     1% /oracle/19.3.0.0
+/dev/lv_crs19300     79.38     57.11   29%    32536     1% /crs/19.3.0.0
+/dev/admin         1.00      0.32   69%     6989     3% /ptlprd/admin
+/dev/dbfs1       400.00    164.58   59%     4039     1% /ptlprd/dbf1
+/dev/dbfs2       400.00    147.92   64%     4039     1% /ptlprd/dbf2
+/dev/dbfs3       400.00    149.06   63%     4037     1% /ptlprd/dbf3
+/dev/dbfs4       300.00     37.23   88%     4034     1% /ptlprd/dbf4
+/dev/diag         11.00     10.94    1%     4091     4% /ptlprd/diag
+/dev/import       10.00      8.05   20%     7484     1% /import
+/dev/ocr1          1.00      0.92    8%     4012     4% /ptlprd/ocr1
+/dev/ocr2          1.00      0.76   25%     4024     4% /ptlprd/ocr2
+/dev/ocr3          1.00      0.95    5%     4011     4% /ptlprd/ocr3
+/dev/redolog     100.00     98.56    2%     4074     1% /ptlprd/redolog
+/dev/redologcp     60.00     45.39   25%    13442     2% /ptlprd/redologcp
+/dev/tfa          20.00     18.78    7%    10553    16% /oracle/tfa
+/dev/vot1          1.00      0.92    9%     4012     4% /ptlprd/vot1
+/dev/vot2          1.00      0.92    9%     4012     4% /ptlprd/vot2
+/dev/vot3          1.00      0.92    9%     4012     4% /ptlprd/vot3
+
+
+
+
+

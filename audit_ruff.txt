@@ -1,0 +1,278 @@
+unified_audit_trail - table
+============================
+SELECT 
+    TO_CHAR(event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS change_time,
+    dbusername AS executed_by,
+    os_username,
+    userhost AS workstation,
+    action_name,
+    object_schema,
+    object_name,
+    sql_text
+FROM insis_db_audit.audit_table
+  AND action_name IN (
+      'CREATE PACKAGE'
+  )
+  AND object_schema NOT IN ('SYS', 'SYSTEM', 'AUDSYS', 'MDSYS')
+ORDER BY event_timestamp DESC;
+
+SELECT DISTINCT
+    TO_CHAR(event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS change_time,
+    dbusername AS executed_by,
+    os_username,
+    userhost AS workstation,
+    action_name,
+    object_schema,
+    object_name,
+    sql_text
+FROM insis_db_audit.audit_table
+WHERE event_timestamp >= TO_DATE('2026-06-02 14:49:00', 'YYYY-MM-DD HH24:MI:SS')
+  AND event_timestamp  < TO_DATE('2026-06-02 16:22:30', 'YYYY-MM-DD HH24:MI:SS')
+  AND action_name IN (
+      'CREATE TABLE', 'ALTER TABLE', 'DROP TABLE',
+      'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
+      'CREATE VIEW',  'ALTER VIEW',  'DROP VIEW',
+      'CREATE TRIGGER', 'DROP TRIGGER',
+      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
+      'CREATE PROCEDURE', 'ALTER PROCEDURE', 'DROP PROCEDURE',
+      'CREATE FUNCTION', 'ALTER FUNCTION', 'DROP FUNCTION',
+      'CREATE PACKAGE', 'ALTER PACKAGE', 'DROP PACKAGE', 'CREATE PACKAGE BODY'
+  )
+  AND object_schema NOT IN ('SYS', 'SYSTEM', 'AUDSYS', 'MDSYS')
+ORDER BY change_time DESC, object_name;
+
+SELECT DISTINCT
+    TO_CHAR(event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS change_time,
+    dbusername AS executed_by,
+    os_username,
+    userhost AS workstation,
+    action_name,
+    object_schema,
+    object_name
+FROM insis_db_audit.audit_table
+WHERE event_timestamp >= TO_DATE('2026-06-02 14:49:00', 'YYYY-MM-DD HH24:MI:SS')
+  AND event_timestamp  < TO_DATE('2026-06-02 16:22:30', 'YYYY-MM-DD HH24:MI:SS')
+  AND action_name IN (
+      'CREATE TABLE', 'ALTER TABLE', 'DROP TABLE',
+      'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
+      'CREATE VIEW',  'ALTER VIEW',  'DROP VIEW',
+      'CREATE TRIGGER', 'DROP TRIGGER',
+      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
+      'CREATE PROCEDURE', 'ALTER PROCEDURE', 'DROP PROCEDURE',
+      'CREATE FUNCTION', 'ALTER FUNCTION', 'DROP FUNCTION',
+      'CREATE PACKAGE', 'ALTER PACKAGE', 'DROP PACKAGE', 'CREATE PACKAGE BODY'
+  )
+  AND object_schema NOT IN ('SYS', 'SYSTEM', 'AUDSYS', 'MDSYS')
+ORDER BY change_time DESC, object_name;
+
+
+================================================
+
+SELECT DISTINCT
+    action_name,
+    object_schema,
+    object_name,
+    dbusername AS executed_by
+FROM insis_db_audit.audit_table
+WHERE event_timestamp >= TO_DATE('2026-06-02 14:49:00', 'YYYY-MM-DD HH24:MI:SS')
+  AND event_timestamp  < TO_DATE('2026-06-02 16:22:30', 'YYYY-MM-DD HH24:MI:SS')
+  AND dbusername = 'LIQUIBASE_USER'
+  AND action_name IN (
+      'CREATE TABLE', 'ALTER TABLE', 'DROP TABLE',
+      'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
+      'CREATE VIEW',  'ALTER VIEW',  'DROP VIEW',
+      'CREATE TRIGGER', 'DROP TRIGGER',
+      'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
+      'CREATE PROCEDURE', 'ALTER PROCEDURE', 'DROP PROCEDURE',
+      'CREATE FUNCTION', 'ALTER FUNCTION', 'DROP FUNCTION',
+      'CREATE PACKAGE', 'ALTER PACKAGE', 'DROP PACKAGE', 'CREATE PACKAGE BODY'
+  )
+  AND object_schema NOT IN ('SYS', 'SYSTEM', 'AUDSYS', 'MDSYS')
+ORDER BY action_name, object_schema, object_name;
+
+=================================================
+SELECT 
+    change_time,
+    executed_by,
+    os_username,
+    workstation,
+    action_name,
+    object_schema,
+    object_name,
+    sql_text
+FROM (
+    SELECT 
+        TO_CHAR(event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS change_time,
+        dbusername AS executed_by,
+        os_username,
+        userhost AS workstation,
+        action_name,
+        object_schema,
+        object_name,
+        sql_text,
+        ROW_NUMBER() OVER (PARTITION BY action_name ORDER BY event_timestamp DESC) AS rn
+    FROM insis_db_audit.audit_table
+    WHERE event_timestamp >= TO_DATE('2026-06-02 14:49:00', 'YYYY-MM-DD HH24:MI:SS')
+      AND event_timestamp  < TO_DATE('2026-06-02 16:22:30', 'YYYY-MM-DD HH24:MI:SS')
+      AND dbusername = 'LIQUIBASE_USER'
+      AND action_name IN (
+          'CREATE TABLE', 'ALTER TABLE', 'DROP TABLE',
+          'CREATE INDEX', 'ALTER INDEX', 'DROP INDEX',
+          'CREATE VIEW',  'ALTER VIEW',  'DROP VIEW',
+          'CREATE TRIGGER', 'DROP TRIGGER',
+          'CREATE SEQUENCE', 'ALTER SEQUENCE', 'DROP SEQUENCE',
+          'CREATE PROCEDURE', 'ALTER PROCEDURE', 'DROP PROCEDURE',
+          'CREATE FUNCTION', 'ALTER FUNCTION', 'DROP FUNCTION',
+          'CREATE PACKAGE', 'ALTER PACKAGE', 'DROP PACKAGE', 'CREATE PACKAGE BODY'
+      )
+      AND object_schema NOT IN ('SYS', 'SYSTEM', 'AUDSYS', 'MDSYS')
+)
+WHERE rn = 1
+ORDER BY action_name;
+
+
+*************************************************
+SELECT 
+    change_time,
+    executed_by,
+    os_username,
+    workstation,
+    action_name,
+    object_schema,
+    object_name,
+    sql_text
+FROM (
+    SELECT 
+        TO_CHAR(event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS change_time,
+        dbusername AS executed_by,
+        os_username,
+        userhost AS workstation,
+        action_name,
+        object_schema,
+        object_name,
+        sql_text,
+        ROW_NUMBER() OVER (PARTITION BY action_name ORDER BY event_timestamp DESC) AS rn
+    FROM insis_db_audit.audit_table
+    WHERE event_timestamp >= TO_DATE('2026-06-02 14:49:00', 'YYYY-MM-DD HH24:MI:SS')
+      AND event_timestamp  < TO_DATE('2026-06-02 16:22:30', 'YYYY-MM-DD HH24:MI:SS')
+      AND dbusername = 'LIQUIBASE_USER'
+      AND action_name IN (
+          'ALTER ANALYTIC VIEW', 'ALTER ASSEMBLY', 'ALTER ATTRIBUTE DIMENSION', 'ALTER CLUSTER', 
+          'ALTER DIMENSION', 'ALTER FLASHBACK ARCHIVE', 'ALTER FUNCTION', 'ALTER HIERARCHY', 
+          'ALTER INDEX', 'ALTER INDEXTYPE', 'ALTER INMEMORY JOIN GROUP', 'ALTER JAVA', 
+          'ALTER LIBRARY', 'ALTER MATERIALIZED VIEW', 'ALTER MATERIALIZED VIEW LOG', 'ALTER MATERIALIZED ZONEMAP', 
+          'ALTER OPERATOR', 'ALTER OUTLINE', 'ALTER PACKAGE', 'ALTER PACKAGE BODY', 
+          'ALTER PROCEDURE', 'ALTER SEQUENCE', 'ALTER SYNONYM', 'ALTER TABLE', 
+          'ALTER TRIGGER', 'ALTER TYPE', 'ALTER TYPE BODY', 'ALTER VIEW', 
+          'ANALYZE CLUSTER', 'ANALYZE INDEX', 'ANALYZE TABLE', 'COMMENT', 
+          'CREATE ANALYTIC VIEW', 'CREATE ASSEMBLY', 'CREATE ATTRIBUTE DIMENSION', 'CREATE CLUSTER', 
+          'CREATE CONTEXT', 'CREATE DIMENSION', 'CREATE DIRECTORY', 'CREATE EDITION', 
+          'CREATE FLASHBACK ARCHIVE', 'CREATE FUNCTION', 'CREATE HIERARCHY', 'CREATE INDEX', 
+          'CREATE INDEXTYPE', 'CREATE INMEMORY JOIN GROUP', 'CREATE JAVA', 'CREATE LIBRARY', 
+          'CREATE MATERIALIZED VIEW', 'CREATE MATERIALIZED VIEW LOG', 'CREATE MATERIALIZED ZONEMAP', 'CREATE OPERATOR', 
+          'CREATE OUTLINE', 'CREATE PACKAGE', 'CREATE PACKAGE BODY', 'CREATE PROCEDURE', 
+          'CREATE SCHEMA', 'CREATE SCHEMA SYNONYM', 'CREATE SEQUENCE', 'CREATE SYNONYM', 
+          'CREATE TABLE', 'CREATE TRIGGER', 'CREATE TYPE', 'CREATE TYPE BODY', 
+          'CREATE VIEW', 'DROP ANALYTIC VIEW', 'DROP ASSEMBLY', 'DROP ATTRIBUTE DIMENSION', 
+          'DROP CLUSTER', 'DROP CONTEXT', 'DROP DIMENSION', 'DROP DIRECTORY', 
+          'DROP EDITION', 'DROP FLASHBACK ARCHIVE', 'DROP FUNCTION', 'DROP HIERARCHY', 
+          'DROP INDEX', 'DROP INDEXTYPE', 'DROP INMEMORY JOIN GROUP', 'DROP JAVA', 
+          'DROP LIBRARY', 'DROP MATERIALIZED VIEW', 'DROP MATERIALIZED VIEW LOG', 'DROP MATERIALIZED ZONEMAP', 
+          'DROP OPERATOR', 'DROP OUTLINE', 'DROP PACKAGE', 'DROP PACKAGE BODY', 
+          'DROP PROCEDURE', 'DROP SCHEMA SYNONYM', 'DROP SEQUENCE', 'DROP SYNONYM', 
+          'DROP TABLE', 'DROP TRIGGER', 'DROP TYPE', 'DROP TYPE BODY', 
+          'DROP VIEW', 'RENAME', 'TRUNCATE CLUSTER', 'TRUNCATE TABLE'
+      )
+      AND object_schema NOT IN ('SYS', 'SYSTEM', 'AUDSYS', 'MDSYS')
+)
+WHERE rn = 1
+ORDER BY action_name;
+**************************************************************************
+
+SELECT audit_option, audit_option_typeFROM audit_unified_policiesWHERE policy_name = 'ETTSAK_DDL_POLICY'ORDER BY audit_option;
+
+SELECT 
+    POLICY_NAME, 
+    ENABLED_OPTION,  -- Shows if enabled SYSTEM-wide or for specific users
+    ENTITY_NAME,     -- The user/role name (if applicable)
+    ENTITY_TYPE      -- USER, ROLE, or ALL USERS
+FROM AUDIT_UNIFIED_ENABLED_POLICIES
+ORDER BY POLICY_NAME;
+
+SELECT 
+    POLICY_NAME,
+    AUDIT_OPTION,        -- The specific DDL command (e.g., CREATE TABLE, DROP VIEW)
+    OBJECT_SCHEMA,       -- Filtered schema name (if applicable)
+    OBJECT_NAME,         -- Filtered object name (if applicable)
+    AUDIT_CONDITION,     -- Any conditional logic applied to the policy
+    CONDITION_EVALUATION -- WHEN SUCCESSFUL, WHEN UNSUCCESSFUL, or BOTH
+FROM AUDIT_UNIFIED_POLICIES
+WHERE POLICY_NAME = 'ETTSAK_DDL_POLICY'
+ORDER BY AUDIT_OPTION;
+
+SELECT owner, job_name, next_run_date, enabled 
+FROM dba_scheduler_jobs 
+WHERE owner = 'INSIS_DB_AUDIT' OR UPPER(job_name) LIKE '%AUD%';
+
+SELECT job_name, job_type, job_action
+FROM dba_scheduler_jobs
+WHERE owner = 'INSIS_DB_AUDIT' 
+  AND job_name = 'AUDIT_DATA_MAINTENANCE_JOB';
+  
+  SELECT job_name, repeat_interval, last_start_date, next_run_date
+FROM dba_scheduler_jobs
+WHERE owner = 'INSIS_DB_AUDIT' 
+  AND job_name = 'AUDIT_DATA_MAINTENANCE_JOB';
+  
+SELECT line, text 
+FROM dba_source 
+WHERE owner = 'INSIS_DB_AUDIT' 
+  AND name = 'AUDIT_DATA_HANDLER' 
+  AND type = 'PACKAGE BODY'
+ORDER BY line;
+
+
+SET LINESIZE 200
+SET PAGESIZE 100
+COL PARAM_NAME FORMAT A25
+COL PARAM_VALUE FORMAT A50
+COL POLICY_NAME FORMAT A25
+COL RETENTION FORMAT A15
+
+PROMPT ========================================================================
+PROMPT 1. CORE SYSTEM & EMAIL CONFIGURATION (AUDIT_CONFIG)
+PROMPT ========================================================================
+SELECT param_name, param_value 
+FROM insis_db_audit.audit_config
+ORDER BY param_name;
+
+PROMPT 
+PROMPT ========================================================================
+PROMPT 2. DATA RETENTION LIFE CYCLES (AUDIT_RETENTION_CONFIG)
+PROMPT ========================================================================
+SELECT partition_type, policy_name, 
+       retention_value || ' ' || retention_unit AS retention, 
+       notes
+FROM insis_db_audit.audit_retention_config
+ORDER BY partition_type DESC, policy_name;
+
+PROMPT 
+PROMPT ========================================================================
+PROMPT 3. RECENT BACKGROUND JOB HEALTH STATUS (LAST 5 EXECUTION ENTRIES)
+PROMPT ========================================================================
+SELECT job_name, 
+       TO_CHAR(start_time, 'YYYY-MM-DD HH24:MI:SS') AS execution_time, 
+       duration, 
+       rows_affected, 
+       status, 
+       error
+FROM (
+    SELECT job_name, start_time, duration, rows_affected, status, error
+    FROM insis_db_audit.audit_job_execution_summary
+    ORDER BY start_time DESC
+)
+WHERE ROWNUM <= 5;
+
+
+
+

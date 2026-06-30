@@ -1,0 +1,231 @@
+- GG STOPPED
+- DATA GUARD APPLY OFF AND TRANSPORT ALSO NEEDS TO BE STOPPED - LOG_ARCHIVE_DEST_2 = defer
+- Perform EXPORT OF TABLESPACE
+- DROP DISKS FROM DATA DISK GROUP
+- ADD THOSE DROPPED DISKS TO ARCHIVE DISK GROUP
+- CREATE BIGFIILE TABESPACE
+- PERFORM THE IMPORT OF TABLESPACE
+- RESTART THE TRANSPORT AND THEN DG APPLY ON
+- START GG PROCESSES
+
+
+
+Master table "SYS"."SYS_EXPORT_TABLESPACE_01" successfully loaded/unloaded
+******************************************************************************
+Dump file set for SYS.SYS_EXPORT_TABLESPACE_01 is:
+  /backup2/INSISHIST/INSISHIST_01.dmp
+  /backup2/INSISHIST/INSISHIST_02.dmp
+  /backup2/INSISHIST/INSISHIST_03.dmp
+  /backup2/INSISHIST/INSISHIST_04.dmp
+  /backup2/INSISHIST/INSISHIST_05.dmp
+  /backup2/INSISHIST/INSISHIST_06.dmp
+  /backup2/INSISHIST/INSISHIST_07.dmp
+  /backup2/INSISHIST/INSISHIST_08.dmp
+  /backup2/INSISHIST/INSISHIST_09.dmp
+  /backup2/INSISHIST/INSISHIST_10.dmp
+Job "SYS"."SYS_EXPORT_TABLESPACE_01" successfully completed at Tue Feb 24 05:22:57 2026 elapsed 0 00:50:34
+
+ 
+ 
+ 
+CREATE /* LFCHG1271145 */ BIGFILE TABLESPACE INSIS_HIST_DATA DATAFILE '+DATA' SIZE 1700G AUTOEXTEND ON next 1G ENCRYPTION USING 'AES256' DEFAULT STORAGE(ENCRYPT);
+
+alter diskgroup /* LFCHG1271145 */ DATA drop disk DATA29  REBALANCE POWER 1000;
+alter diskgroup /* LFCHG1271145 */ DATA drop disk DATA28  REBALANCE POWER 1000;
+ 
+ALTER DISKGROUP /* LFCHG1271145 */ ARCHIVE ADD DISK 'AFD:DATA29' REBALANCE POWER 1000;
+ALTER DISKGROUP /* LFCHG1271145 */ ARCHIVE ADD DISK 'AFD:DATA28' REBALANCE POWER 1000;
+
+Job "SYS"."SYS_IMPORT_FULL_01" successfully completed at Tue Feb 24 07:51:02 2026 elapsed 0 01:07:28
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Explanation:
+
+Great questions! Let’s break down everything in detail, including **exact commands**, **AFD meaning**, and **how to check which disks can be deleted and where tablespace data resides**.
+
+---
+
+## 1. **Exact Commands for the Whole Operation**
+
+### **A. Data Pump Export (Backup)**
+
+bash
+expdp system/password DIRECTORY=INSISHIST_DIR \
+  DUMPFILE=INSISHIST_%U.dmp LOGFILE=INSISHIST_export.log \
+  TABLESPACES=INSIS_HIST_DATA PARALLEL=10
+
+- **Exports** all data from the INSIS_HIST_DATA tablespace into dump files.
+
+---
+
+### **B. Drop Disks from ASM Diskgroup**
+
+
+ALTER DISKGROUP DATA DROP DISK DATA29 REBALANCE POWER 1000;
+ALTER DISKGROUP DATA DROP DISK DATA28 REBALANCE POWER 1000;
+
+- **Removes** disks DATA29 and DATA28 from the ASM diskgroup named DATA.
+- REBALANCE POWER 1000 speeds up the rebalance (data redistribution).
+
+---
+
+### **C. Add Disks to Another Diskgroup**
+
+
+ALTER DISKGROUP ARCHIVE ADD DISK 'AFD:DATA29' REBALANCE POWER 1000;
+ALTER DISKGROUP ARCHIVE ADD DISK 'AFD:DATA28' REBALANCE POWER 1000;
+
+- **Adds** the disks (now named as AFD:DATA29 and AFD:DATA28) to the ARCHIVE diskgroup.
+
+---
+
+### **D. Create New Tablespace**
+
+
+CREATE BIGFILE TABLESPACE INSIS_HIST_DATA
+  DATAFILE '+DATA' SIZE 1700G AUTOEXTEND ON NEXT 1G
+  ENCRYPTION USING 'AES256'
+  DEFAULT STORAGE(ENCRYPT);
+
+- **Creates** a new bigfile tablespace in the +DATA ASM diskgroup.
+
+---
+
+### **E. Data Pump Import (Restore)**
+
+bash
+impdp system/password DIRECTORY=INSISHIST_DIR \
+  DUMPFILE=INSISHIST_%U.dmp LOGFILE=INSISHIST_import.log \
+  TABLESPACES=INSIS_HIST_DATA PARALLEL=10
+
+- **Imports** all data back into the new tablespace.
+
+---
+
+### **F. Monitor ASM Rebalance**
+
+
+SELECT * FROM v$asm_operation;
+
+- **Monitors** the progress of disk rebalance operations.
+
+---
+
+## 2. **What is AFD?**
+
+- **AFD** stands for **ASM Filter Driver**.
+- It is an Oracle technology that provides I/O filtering and validation for ASM disks at the OS level.
+- When you see AFD:DATA28, it means the disk is managed by ASM Filter Driver and is named DATA28.
+
+**Example:**
+- 'AFD:DATA28' is the device name as seen by Oracle ASM, not the OS path (like /dev/sdX).
+
+---
+
+## 3. **How to Know if Disks Can Be Deleted?**
+
+- **Check if the disks are in use:**  
+  You should only drop a disk from an ASM diskgroup if:
+  - There is enough free/usable space in the diskgroup **after** dropping.
+  - No datafiles (tablespaces) are solely residing on those disks.
+
+**Check disk usage:**
+
+SELECT name, path, total_mb, free_mb, state
+FROM v$asm_disk
+WHERE header_status = 'MEMBER' AND group_number = (SELECT group_number FROM v$asm_diskgroup WHERE name = 'DATA');
+
+
+- **Check rebalance:**  
+  After you issue the DROP DISK command, ASM will **rebalance** the data, moving it off those disks before actually removing them.
+
+---
+
+## 4. **How to Check Which Disks Hold Tablespace Data?**
+
+- **Find datafiles for tablespace:**
+
+SELECT file_name
+FROM dba_data_files
+WHERE tablespace_name = 'INSIS_HIST_DATA';
+
+- The file_name will look like +DATA/.... (ASM path).
+
+- **Find which ASM disks hold a file:**
+
+-- Get the file number from the ASM file name
+SELECT file_number, name
+FROM v$asm_file
+WHERE group_number = (SELECT group_number FROM v$asm_diskgroup WHERE name = 'DATA');
+
+-- Then, for a specific file, see which disks it spans
+SELECT a.name AS disk_name, b.file_number, b.incarnation, b.block_number
+FROM v$asm_disk a, v$asm_file b
+WHERE a.group_number = b.group_number
+  AND b.file_number = <your_file_number>;
+
+- **Note:** In ASM, files are striped and mirrored across multiple disks, so a tablespace is usually spread across many disks, not just two.
+
+---
+
+## 5. **How to Know If Tablespace Data Is Only on Those Two Disks?**
+
+- **In ASM, this is unlikely!**  
+  ASM stripes data across all disks in the diskgroup for redundancy and performance.
+- If you drop two disks, ASM will **move data off them** (rebalance) before completing the drop, so you don’t lose data.
+
+---
+
+## **Summary Table**
+
+| Step          | Command/Action                                                                 |
+|---------------|-------------------------------------------------------------------------------|
+| Export        | expdp ... TABLESPACES=INSIS_HIST_DATA ...                                    |
+| Drop disk     | ALTER DISKGROUP DATA DROP DISK ... REBALANCE POWER 1000;                    |
+| Add disk      | ALTER DISKGROUP ARCHIVE ADD DISK 'AFD:DATA28' ...                           |
+| Create tablespace | CREATE BIGFILE TABLESPACE ...                                           |
+| Import        | impdp ... TABLESPACES=INSIS_HIST_DATA ...                                   |
+| Monitor ASM   | SELECT * FROM v$asm_operation;                                              |
+| Check disks   | SELECT * FROM v$asm_disk WHERE ...                                          |
+| Check files   | SELECT * FROM dba_data_files WHERE ...                                      |
+
+---
+
+## **In Simple Terms**
+
+- **AFD:** ASM Filter Driver, Oracle’s way of managing disks.
+- **Dropping disks:** ASM will move data off them before removing, so you don’t lose data.
+- **Tablespace data:** Usually spread across all disks in the diskgroup, not just two.
+
+---
+
+**If you want to see which files are on which disks, or need help with any specific command, let me know!**

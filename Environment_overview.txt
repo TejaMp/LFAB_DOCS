@@ -1,0 +1,50 @@
+PROD LIST:
+e75lrl1579,e75lrl1580,e75lrl1054,e75lrl1055,e75lrl1025v,e75lrl1545v,e75lrl1004v
+
+
+Prod: (datacenter : Satra and Sollentuna)
+============================================
+Primary 2 node RAC --> 2 node DR
+
+- Prim db uses ASMFD - filtering is disabled in prod because of multipath configuration
+  - grid 19.23
+  - rdbms 19.8
+- Standby db uses udev rules
+  - grid 19.8
+  - rdbms 19.8
+
+backups running in primary, stored in tape.
+- incremental backup is everyday @23.20 CET
+- Full backups on Friday @23.30CET
+- Archive logs every 1 hour
+
+-> Goldengate
+-> TDE
+-> Unified Audit
+-> APEX
+
+Goldengate:
+==========
+It replicates data from x,y,z schemas to INSISHIST schema in the same database.
+
+
+Prod clone envs: ( standslone)
+================
+BLITZER , TASKFORC, ENDEAVOR, UPGPT(2 node RAC)
+
+
+Release testing environments:
+==============================
+UPGSIT (2 node RAC)
+SAMOSA (2 node RAC)
+HOTFIX (PDB)
+PREPROD (PDB)
+
+
+Other envs (All are container)
+=============
+Each feature team has 3-4 environments for development and testing.
+
+doing POC for logical standby.
+
+ 

@@ -1,0 +1,4 @@
+SIT-deploye-laundry - Created branch in below repo:
+
+https://azuredo.lfnet.se/tfs/Lansforsakringar/Code-ART-MyHome-MyFamily/_git/ettsak-deploy-laundry-primary?path=/ado/azure-pipeline.yml&version=GBSIT-deploye-laundry&_a=contents
+

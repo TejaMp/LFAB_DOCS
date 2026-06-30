@@ -1,0 +1,28 @@
+-- enable perf log
+update insis_gen_cfg_v10.cfg_system_param
+   set param_value_cpr_id = (select param_value_cpr_id from insis_gen_cfg_v10.cprs_param_value where param_value = 'ON_WITH_CONTEXT' and param_id in (select param_cpr_id from insis_gen_cfg_v10.cpr_params where upper(param_name) = 'LOG_PERFORMANCE'))
+   where sys_param_id in (select sys_param_id
+       from insis_gen_cfg_v10.cfg_system_param
+       where param_value_cpr_id in (select param_value_cpr_id
+             from insis_gen_cfg_v10.cprs_param_value
+             where param_id in (select param_cpr_id
+                   from insis_gen_cfg_v10.cpr_params
+                   where upper(param_name) = 'LOG_PERFORMANCE'
+               )
+         )
+   );
+   
+
+-- disable perf log
+update insis_gen_cfg_v10.cfg_system_param
+  set param_value_cpr_id = (select param_value_cpr_id from insis_gen_cfg_v10.cprs_param_value where param_value = 'OFF' and param_id in (select param_cpr_id from insis_gen_cfg_v10.cpr_params where upper(param_name) = 'LOG_PERFORMANCE'))
+  where sys_param_id in (select sys_param_id
+      from insis_gen_cfg_v10.cfg_system_param
+      where param_value_cpr_id in (select param_value_cpr_id
+            from insis_gen_cfg_v10.cprs_param_value
+            where param_id in (select param_cpr_id
+                  from insis_gen_cfg_v10.cpr_params
+                  where upper(param_name) = 'LOG_PERFORMANCE'
+              )
+        )
+  );

@@ -1,0 +1,27 @@
+ps -ef|grep lsp
+
+SELECT * FROM v$logstdby_state;
+
+SELECT * FROM v$logstdby_progress;
+
+SELECT  thread# , SEQUENCE#, FIRST_TIME, APPLIED FROM DBA_LOGSTDBY_LOG  where APPLIED='NO' or  APPLIED='CURRENT'  ORDER BY SEQUENCE#;
+
+SELECT TYPE, STATUS_CODE, STATUS FROM V$LOGSTDBY_PROCESS;
+
+select sid, serial#, sql_id from v$session where sid in (select sid from V$LOGSTDBY_PROCESS) and sql_id is not null;
+  
+alter database stop logical standby apply; --> to stop logical standby apply
+
+\then shut the database
+After patch
+\start the database with startup
+and run below to resume the logical apply
+
+alter database start logical standby apply immediate ;
+
+
+
+
+select OWNER,NAME,ERROR from dba_logstdby_skip;
+
+SELECT  DISTINCT OWNER,TABLE_NAME FROM DBA_LOGSTDBY_UNSUPPORTED_TABLE;

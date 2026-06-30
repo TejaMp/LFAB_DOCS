@@ -1,0 +1,70 @@
+Here is your complete emergency plan to resolve the database bottleneck immediately, along with the exact steps to undo the changes later.
+## Phase 1: The Emergency Fix (Run Now)
+Run these commands to switch Unified Auditing from synchronous disk locking to memory buffering. This will not lose any audit logs; it simply caches them safely in RAM (SGA) first to immediately clear your 253 active waits.
+
+-- Step 1: Switch auditing to asynchronous memory buffering
+BEGIN
+  DBMS_AUDIT_MGMT.SET_AUDIT_TRAIL_PROPERTY(
+    audit_trail_type           => DBMS_AUDIT_MGMT.AUDIT_TRAIL_UNIFIED,
+    audit_trail_property       => DBMS_AUDIT_MGMT.AUDIT_TRAIL_WRITE_MODE,
+    audit_trail_property_value => DBMS_AUDIT_MGMT.AUDIT_TRAIL_QUEUED_WRITE
+  );END;
+/
+-- Step 2: (Optional Emergency Option) If the wait queue does not drop instantly, -- temporarily stop the connection log storm. You can turn this back on in 5 minutes.
+NOAUDIT POLICY ETTSAK_CONNECTION_POLICY_DB;
+
+NOAUDIT POLICY ETTSAK_DML_POLICY;
+
+------------------------------
+## Phase 2: How to Rollback (Return to Original State)
+Once your performance graph flattens, your application stabilizes, and the initial connection storm subsides, run these commands to instantly restore your exact original configuration:
+
+-- Step 1: Re-enable the connection audit policy (if you disabled it in Phase 1)
+AUDIT POLICY ETTSAK_CONNECTION_POLICY_DB;
+-- Step 2: Switch auditing back to standard synchronous disk mode
+BEGIN
+  DBMS_AUDIT_MGMT.SET_AUDIT_TRAIL_PROPERTY(
+    audit_trail_type           => DBMS_AUDIT_MGMT.AUDIT_TRAIL_UNIFIED,
+    audit_trail_property       => DBMS_AUDIT_MGMT.AUDIT_TRAIL_WRITE_MODE,
+    audit_trail_property_value => DBMS_AUDIT_MGMT.AUDIT_TRAIL_IMMEDIATE_WRITE
+  );END;
+/
+
+------------------------------
+Please run the Phase 1 commands now. Let me know:
+
+* Did the commands execute successfully without errors?
+* Is your active session wait count beginning to drop?
+
+
+
+No, you do not need to purge or truncate the audit table. Truncating or deleting rows from AUD$UNIFIED will not fix this problem, and attempting to do so right now can severely damage your recovery [2, 3].
+Here is exactly why truncating the table will not stop the issue from coming back, along with the safe step to take since WebLogic is restarting.
+## 1. Why Truncating or Purging Will Fail
+
+* The Cause is a Write Collision, Not Table Size: The performance spike happens because hundreds of connections are trying to insert new lines into the exact same memory block at the same microsecond [2]. Making the table empty does not change the fact that they are all trying to write to the same spot at once.
+* The Risk of Freezing the DB: Running a purge command (CLEAN_AUDIT_TRAIL) while WebLogic is booting back up will place a massive data-definition lock on the table. This will cause the new WebLogic connections to freeze instantly on library cache or table locks, making the outage worse.
+
+## 2. The Core Problem Right Now: The WebLogic Restart Loop
+Because you just restarted WebLogic, it is executing a brand-new Login Storm right now.
+When WebLogic boots up, it immediately opens dozens of connections to fill its pool. Even though you disabled the two audit policies earlier, you still have 6 other audit policies actively running (such as ETTSAK_ADMIN_POLICY and ETTSAK_USER_MGMT_POLICY). Because your auditing engine is still configured to write to disk synchronously, these remaining 6 policies are enough to trigger the enq: HW - contention lock fight all over again during the startup flood.
+## 3. The Only Solution to Stop It From Coming Back
+To permanently prevent this contention from returning after this restart, you must change how Oracle handles the incoming logs. You must tell the database to hold the audit logs in RAM memory and write them to disk in quiet background batches, rather than locking the database for every single line item [2].
+Run this single, safe command right now while WebLogic boots up:
+
+EXEC DBMS_AUDIT_MGMT.SET_AUDIT_TRAIL_PROPERTY(DBMS_AUDIT_MGMT.AUDIT_TRAIL_UNIFIED, DBMS_AUDIT_MGMT.AUDIT_TRAIL_WRITE_MODE, DBMS_AUDIT_MGMT.AUDIT_TRAIL_QUEUED_WRITE);
+
+## 4. How to Roll it Back Safely Later
+If your DBA or security team objects to this background buffering configuration later, you can return to your exact original disk-locking setup using this single command after the system settles:
+
+EXEC DBMS_AUDIT_MGMT.SET_AUDIT_TRAIL_PROPERTY(DBMS_AUDIT_MGMT.AUDIT_TRAIL_UNIFIED, DBMS_AUDIT_MGMT.AUDIT_TRAIL_WRITE_MODE, DBMS_AUDIT_MGMT.AUDIT_TRAIL_IMMEDIATE_WRITE);
+
+------------------------------
+
+* Did the QUEUED_WRITE short-cut command execute successfully with a message saying PL/SQL procedure successfully completed?
+* Check your Performance Hub screen—as WebLogic finishes booting up, is the orange wait spike staying safely below the red CPU line this time?
+
+
+
+
+

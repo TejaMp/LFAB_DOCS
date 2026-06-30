@@ -1,0 +1,58 @@
+SELECT event, 
+       wait_class, 
+       COUNT(*) as active_sessions
+solution performed:
+===================
+BEGIN
+    SYS.DBMS_AUDIT_MGMT.SET_AUDIT_TRAIL_PROPERTY(
+        audit_trail_type            => SYS.DBMS_AUDIT_MGMT.AUDIT_TRAIL_UNIFIED,
+        audit_trail_property        => SYS.DBMS_AUDIT_MGMT.AUDIT_TRAIL_WRITE_MODE,
+        audit_trail_property_value  => SYS.DBMS_AUDIT_MGMT.AUDIT_TRAIL_QUEUED_WRITE
+    );
+END;
+/
+
+select * FROM gv$active_session_history
+WHERE sample_time > sysdate - interval '15' minute
+  AND wait_class NOT IN ('Idle', 'CPU')
+GROUP BY event, wait_class
+ORDER BY active_sessions DESC;
+
+SELECT blocking_instance, blocking_session, sid, serial#, event, seconds_in_wait 
+FROM gv$session 
+WHERE blocking_session IS NOT NULL;
+
+
+SELECT decode(b.type, 'HW', 'High Water Mark Contention') as lock_type,
+       b.id1 as "File ID",
+       b.id2 as "HWM Block ID",
+       s.sql_id,
+       s.program
+FROM gv$lock b, gv$session s
+WHERE b.sid = s.sid 
+  AND b.inst_id = s.inst_id
+  AND b.sid = 2282 
+  AND b.inst_id = 1;
+  
+  
+  SELECT o.owner, o.object_name, o.object_type, current_obj#, COUNT(*)
+FROM gv$active_session_history ash
+JOIN dba_objects o ON ash.current_obj# = o.object_id
+WHERE ash.event = 'enq: HW - contention'
+  AND ash.sample_time > sysdate - interval '15' minute
+GROUP BY o.owner, o.object_name, o.object_type, current_obj#
+ORDER BY COUNT(*) DESC;
+
+SELECT s.sql_id, q.sql_text 
+FROM gv$session s
+JOIN gv$sql q ON s.sql_id = q.sql_id AND s.inst_id = q.inst_id
+WHERE s.sid = 2282 AND s.inst_id = 1;
+
+SELECT o.owner, o.object_name, o.object_type, ash.current_obj#, COUNT(*) as wait_count
+FROM gv$active_session_history ash
+JOIN dba_objects o ON ash.current_obj# = o.object_id
+WHERE ash.event = 'enq: HW - contention'
+  AND ash.sample_time > sysdate - interval '15' minute
+GROUP BY o.owner, o.object_name, o.object_type, ash.current_obj#
+ORDER BY wait_count DESC;
+

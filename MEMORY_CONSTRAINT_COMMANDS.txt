@@ -1,0 +1,36 @@
+free -h
+top
+vmstat 2 10
+ps -eo pid,ppid,user,cmd,%mem,%cpu --sort=-%mem | head -n 20
+
+ps -u oracle -o rss,cmd | awk '{sum+=$1} END {print sum/1024 " MB"}'
+ps -u grid -o rss,cmd | awk '{sum+=$1} END {print sum/1024 " MB"}'
+ps -u root -o rss,cmd | awk '{sum+=$1} END {print sum/1024 " MB"}'
+
+ps aux --sort=-%mem | head -20
+
+
+
+SELECT
+  (SELECT value/1024/1024 FROM v$parameter WHERE name = 'sga_target') AS sga_target_mb,
+  (SELECT value/1024/1024 FROM v$parameter WHERE name = 'sga_max_size') AS sga_max_size_mb,
+  (SELECT value/1024/1024 FROM v$parameter WHERE name = 'pga_aggregate_target') AS pga_target_mb
+FROM dual;
+
+SGA_TARGET_MB SGA_MAX_SIZE_MB PGA_TARGET_MB
+------------- --------------- -------------
+        46080           46080          9216
+
+
+SELECT * FROM v$sga;
+
+SELECT name, value FROM v$pgastat WHERE name LIKE '%PGA%';
+
+ipcs -m | grep oracle
+
+
+
+
+
+
+

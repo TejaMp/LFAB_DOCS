@@ -1,0 +1,346 @@
+Servers list:
+=============
+PROD:
+e75lrl1579.lfnet.se - ESAKDB - RAC
+e75lrl1580.lfnet.se - ESAKDB - RAC
+
+DR: (PROD Standby Active DG)
+e75lrl1054.lfnet.se - INSISDR - RAC
+e75lrl1055.lfnet.se - INSISDR - RAC
+
+Zeta servers:
+e75lrl1025v.lfnet.se - OEMDB, CAVEMAN
+e75lrl1004v.lfnet.se - TASKFORC, ENDEAVOR
+e75lrl2036v (DB:INSISAUD) -- Audit DB (PROD)
+
+e75lrl1545v.lfnet.se - PROD INFY TESTING CLONE - BLITZER, PRDCLN
+
+e75lrl1579,e75lrl1580,e75lrl1054,e75lrl1055,e75lrl2036v,e75lrl1025v,e75lrl1545v,e75lrl1004v
+
+NON-PROD:
+e75b0087.lfad.lfnet.se - LOGICAL STANDBY
+e75lrl3033v.lfnet.se
+e75lrl2082v.lfnet.se
+e75b0040.lfad.lfnet.se - Zeta Server
+e75lrl2037v.lfnet.se
+e75lrl3093v.lfnet.se
+e75lrl3021v.lfnet.se
+e75lrl3045v.lfnet.se - USER LOADING NON-PROD
+e75lrl3089v.lfnet.se
+e75lrl3064v.lfnet.se
+e75lrl3046v.lfnet.se
+e75lrl3061v.lfnet.se
+e75lrl3020v.lfnet.se
+e75lrl3080v.lfnet.se - PREPROD
+e75lrl2013v.lfnet.se
+e75lrl2047.lfnet.se - SAMOSA, UPGSIT - RAC
+e75lrl2048.lfnet.se - SAMOSA, UPGSIT - RAC
+e75b0087.lfad.lfnet.se - Logical standby
+e75lrl2038v.lfnet.se - SIT - RAC
+e75lrl2039v.lfnet.se - SIT - RAC
+e75lrl2506v.lfnet.se - UPGPT - RAC
+e75lrl2507v.lfnet.se - UPGPT - RAC
+e75lrl2017v.lfnet.se
+
+These are the environment details in that server.
+ 
+Environment details:
+Trinity team environment:
+Database name: PRDUPGRD
+Application name: UPGPRD
+
+SAMOSA environment:
+Database name: SAMOSA
+Application name: SAMOSA
+
+UPGSIT environment: (No testing should be performed here going forward)
+Database name: UPGSIT
+Application name: None
+ 
+
+ACCESS INVENTORY:
+==================
+ATHENS: - e75lrl3033v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB34:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 GOTLAND                        READ WRITE NO
+         4 DALARNA                        READ WRITE NO
+         5 KALMAR                         READ WRITE NO
+         6 SKANE                          READ WRITE NO
+         7 UTLOPNEW                       READ WRITE NO
+         9 OREBRO                         READ WRITE NO
+        10 ATHENS                         READ WRITE NO
+        11 REPOSDB                        READ WRITE NO
+        12 ATHENCP                        MOUNTED
+		
+BEAGLE: - e75lrl2082v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB82:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 PINTA                          READ WRITE NO
+         4 TITANIC                        READ WRITE NO
+         5 VASA                           READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+        10 BEAGLE                         READ WRITE NO
+
+BEAST: - e75b0040.lfad.lfnet.se - Zeta Server
+ACCESS DENIED 
+
+BECKET: - e75lrl2037v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB37:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 LIQPOC                         READ WRITE NO
+         4 GODOT                          READ WRITE NO
+         5 RHEA                           READ WRITE NO
+         7 YAKKA                          READ WRITE NO
+         8 REPOSDB                        READ WRITE NO
+         9 EMP_SRC                        READ WRITE NO
+        11 EMP_BKP                        MOUNTED
+        12 BECKET                         READ WRITE NO
+
+BIGFISH: - e75lrl3093v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB93:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 KINGFISH                       READ WRITE NO
+         4 VIKINGS                        READ WRITE NO
+         5 BIGFISH                        READ WRITE NO
+         6 LOBSTER                        READ WRITE NO
+         7 VITOSHA                        READ WRITE NO
+         8 RMANCATDB                      READ WRITE NO
+         9 MINICOY                        READ WRITE NO
+        11 REPOSDB                        READ WRITE NO
+
+BLITZER: - PROD - e75lrl1545v.lfnet.se - INFY TESTING
++ASM:/g01/app/grid/oracle19c:N          # line added by Agent
+BLITZER:/u01/app/oracle/rdbms19c:N              # line added by Agent
+
+BORAS: - e75lrl3021v.lfnet.se
+CDB Database
++ASM:/g01/app/grid/oracle19c:N
+INSCDB21:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 FRIENDS                        READ WRITE NO
+         4 PATRAS                         READ WRITE NO
+         5 RASUNDA                        READ WRITE NO
+         6 OLYMPIA                        READ WRITE NO
+         7 BORAS                          READ WRITE NO
+         9 REPOSDB                        READ WRITE NO
+        10 ULLEVI                         READ WRITE NO
+
+BUGATTI: - e75lrl3045v.lfnet.se - USER LOADING NON-PROD
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB45:/u01/app/oracle/rdbms19c:N ==> INSISMED Database for user loading
+TDMSAK:/u01/app/oracle/rdbms19c:N
+REPOSDB:/u01/app/oracle/rdbms19c:N
+
+INSCDB45:
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 GHOST                          READ WRITE NO
+         4 MERC                           READ WRITE NO
+         5 FORD                           READ WRITE NO
+         6 PORSCHE                        READ WRITE NO
+         7 MAT_BI                         READ WRITE NO
+         8 BUGATTI                        READ WRITE NO
+         9 INSISMAT                       READ WRITE NO
+        10 REPOSDB                        READ WRITE NO
+		
+CAVEMAN: - e75lrl1025v.lfnet.se - Zeta Server
+PROD server
+
+CUCKOO: - e75lrl3089v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB89:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 POZZO                          READ WRITE NO
+         4 SWIFT                          READ WRITE NO
+         5 SKUA                           READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+         9 CUCKOO                         READ WRITE NO
+
+DEV_MIG: - e75lrl3064v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB64:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 DEV_MIG                        READ WRITE NO
+         4 THOR                           READ WRITE NO
+         5 GROOT                          READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+         8 HULK                           READ WRITE NO
+
+DOVE: - e75lrl3046v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB46:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         5 RAVEN                          READ WRITE NO
+         6 DOVE                           READ WRITE NO
+         7 KITE                           READ WRITE NO
+         8 FALCON                         READ WRITE NO
+
+ENDEAVOR: - PROD - e75lrl1004v.lfnet.se
+
+INCONT:/u01/app/oracle/rdbms19c:N               # line added by Agent
+#TASKFORC:/u01/app/oracle/rdbms19c:N            # line added by Agent
++ASM:/g01/app/grid/oracle19c:N          # line added by Agent
+TASKFORC:/u01/app/oracle/rdbms19c:N             # line added by Agent
+ENDEAVOR:/u01/app/oracle/rdbms19c:N             # line added by Agent
+
+FERRARI: - e75lrl3061v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB61:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         5 MASERATI                       READ WRITE NO
+         6 PYAAR                          READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+         8 FERRARI                        READ WRITE NO
+         9 TEST                           READ WRITE NO
+        10 MCLAREN                        READ WRITE NO
+		
+GULL: - e75lrl3020v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB20:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 GULL                           READ WRITE NO
+         4 DUPDB                          READ WRITE NO
+         5 KESTREL                        READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+         8 KINGLET                        READ WRITE NO
+         9 PETREL                         READ WRITE NO
+
+HOTFIX: - e75lrl3080v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB80:/u01/app/oracle/rdbms19c:N
+UPGMIDB:/u01/app/oracle/rdbms19c:N
+
+INSCDB80:
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 PREPROD                        READ WRITE NO
+         5 MI1                            READ WRITE NO
+         6 HOTFIX                         READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+         9 UPGMI2                         READ WRITE NO
+
+HYDRA: - e75lrl2013v.lfnet.se
+CDB Database:
++ASM:/g01/app/grid/oracle19c:N
+INSCDB13:/u01/app/oracle/rdbms19c:N
+
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 KAPPA                          READ WRITE NO
+         5 SIREN                          READ WRITE NO
+         6 PISCES                         READ WRITE NO
+         7 REPOSDB                        READ WRITE NO
+         8 HYDRA                          READ WRITE NO
+
+
+SAMOSA:
+UPGSIT:
+
+e75lrl2047.lfnet.se
+e75lrl2048.lfnet.se
+
+-MGMTDB:/g01/app/grid/oracle19c:N
++ASM1:/g01/app/grid/oracle19c:N
+UPGSIT1:/u01/app/oracle/rdbms19c:N
+TESTDB1:/u01/app/oracle/rdbms19c:N
+REPOSDB1:/u01/app/oracle/rdbms19c:N
+SAMOSA1:/u01/app/oracle/rdbms19c:N
+
+e75lrl2048.lfnet.se:
++ASM2:/g01/app/grid/oracle19c:N
+TESTDB2:/u01/app/oracle/rdbms19c:N
+UPGSIT2:/u01/app/oracle/rdbms19c:N
+SAMOSA2:/u01/app/oracle/rdbms19c:N
+
+SIT:
+
+e75lrl2038v.lfnet.se:
++ASM1:/g01/app/grid/oracle19c:N
+SIT1:/u01/app/oracle/rdbms19c:N         # line added by Agent
+-MGMTDB:/g01/app/grid/oracle19c:N               # line added by Agent
+
+e75lrl2039v.lfnet.se:
++ASM2:/g01/app/grid/oracle19c:N
+SIT2:/u01/app/oracle/rdbms19c:N         # line added by Agent
+-MGMTDB:/g01/app/grid/oracle19c:N               # line added by Agent
+
+UPGPT:
+
+e75lrl2506v.lfnet.se:
+-MGMTDB:/g01/app/grid/oracle19c:N
++ASM1:/g01/app/grid/oracle19c:N
+UPGPT1:/u01/app/oracle/rdbms19c:N
+
+e75lrl2507v.lfnet.se
++ASM2:/g01/app/grid/oracle19c:N
+UPGPT2:/u01/app/oracle/rdbms19c:N
+
+VARAMON: e75lrl2017v.lfnet.se
+
++ASM:/g01/app/grid/oracle19c:N
+I2017CDB:/u01/app/oracle/rdbms19c:N
+UPGSIT:/u01/app/oracle/rdbms19c:N - NOT OPEN
+
+I2017CDB:
+    CON_ID CON_NAME                       OPEN MODE  RESTRICTED
+---------- ------------------------------ ---------- ----------
+         2 PDB$SEED                       READ ONLY  NO
+         3 VARAMON                        READ WRITE NO
+         4 UPG_GOLD_DEC23                 READ WRITE NO
+         8 EMPTYDB                        READ WRITE NO
+         9 RAGNAR                         READ WRITE NO
+        12 REPOSDB                        READ WRITE NO
+        13 POCDB2                         READ WRITE NO
+
+
+
+

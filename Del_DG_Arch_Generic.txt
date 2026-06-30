@@ -1,0 +1,95 @@
+#!/bin/bash
+###################################################################
+# Script Name    : Del_DG_Arch_Generic.sh
+# Description    : Delete old archive logs from standby databases
+# Usage          : Helps avoid FRA exhaustion by clearing applied logs
+###################################################################
+
+#### -------------------- CONFIG SECTION -------------------- ####
+
+# Directory to store logs
+export FILE_DIR="/home/oracle/Script"
+mkdir -p "$FILE_DIR"  # Ensure log folder exists
+
+# List of database SIDs to process
+DB_LIST=("INSISDR1" "REPOSDB1")
+
+# Oracle environment
+export ORACLE_HOME="/u01/app/oracle/rdbms19c"
+export PATH=$ORACLE_HOME:$PATH
+export LD_LIBRARY_PATH=$ORACLE_HOME/lib
+
+# Archive log deletion policy
+SEQUENCE_RETAIN=20          # Safety buffer
+LOG_AGE_HOURS=5           # Archive logs older than this
+
+# Email notification
+MAIL_TO="Karthikeyan.Saravanan@lansforsakringar.se"
+MAIL_SUBJECT="Archive Log Deletion Report"
+MAIL_COMMAND=$(command -v mailx || command -v mail)
+
+#### ------------------ END CONFIG SECTION ------------------ ####
+
+run_cleanup() {
+  local DB_NAME=$1
+  local LOG_FILE="$FILE_DIR/Execution_${DB_NAME}.log"
+  export ORACLE_SID=$DB_NAME
+
+  echo "[$(date)] Starting cleanup for $DB_NAME" > "$LOG_FILE"
+
+  local SQLPLUS="$ORACLE_HOME/bin/sqlplus -L -S / as sysdba"
+  local PRE="set pagesize 0\nset feedback off\n"
+
+  local ROLE=$(echo -e "$PRE select database_role from v\$database;" | $SQLPLUS | xargs)
+  local DB_UNIQUE_NAME=$(echo -e "$PRE select db_unique_name from v\$database;" | $SQLPLUS | xargs)
+
+  echo "Database Name: $DB_UNIQUE_NAME" >> "$LOG_FILE"
+  echo "Database Role: $ROLE" >> "$LOG_FILE"
+  echo "------------------------------------------------------------------------" >> "$LOG_FILE"
+
+  if [[ "$ROLE" != "PHYSICAL STANDBY" ]]; then
+    echo "ERROR: $DB_NAME is not a PHYSICAL STANDBY. Skipping." >> "$LOG_FILE"
+    return 1
+  fi
+
+  local THREADS=$(echo -e "$PRE select distinct thread# from v\$archived_log;" | $SQLPLUS)
+
+  for THREAD in $THREADS; do
+    local MAX_APPLIED=$(echo -e "$PRE select max(sequence#) from v\$archived_log where applied='YES' and thread#=$THREAD and COMPLETION_TIME < SYSDATE - $LOG_AGE_HOURS/24;" | $SQLPLUS | xargs)
+
+    if [[ -z "$MAX_APPLIED" || "$MAX_APPLIED" == "0" ]]; then
+      echo "No eligible logs found for Thread $THREAD. Skipping." >> "$LOG_FILE"
+      continue
+    fi
+
+    local DELETE_UNTIL=$((MAX_APPLIED - SEQUENCE_RETAIN))
+    echo "Deleting logs up to Sequence $DELETE_UNTIL for Thread $THREAD" >> "$LOG_FILE"
+    echo "delete noprompt archivelog until sequence $DELETE_UNTIL thread $THREAD;" | $ORACLE_HOME/bin/rman target / >> "$LOG_FILE" 2>&1
+    echo "Archive logs deleted successfully." >> "$LOG_FILE"
+  done
+
+  echo "[$(date)] Cleanup completed for $DB_NAME" >> "$LOG_FILE"
+  echo "" >> "$LOG_FILE"
+}
+
+# === MAIN LOOP ===
+for DB in "${DB_LIST[@]}"; do
+  run_cleanup "$DB"
+done
+
+# === Send Email Notification ===
+if [[ -n "$MAIL_COMMAND" ]]; then
+  ATTACHMENTS=()
+  for DB in "${DB_LIST[@]}"; do
+    ATTACHMENTS+=("-a" "$FILE_DIR/Execution_${DB}.log")
+  done
+
+  echo "Please find the archive deletion logs attached." | \
+    "$MAIL_COMMAND" -s "$MAIL_SUBJECT" "${ATTACHMENTS[@]}" "$MAIL_TO"
+else
+  echo "Warning: mail or mailx not found. Skipping email notification."
+fi
+
+
+
+

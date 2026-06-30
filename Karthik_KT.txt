@@ -1,0 +1,25 @@
+user load
+-- db user access
+1. create user xxx identified by xxx;
+2. grant permission (connect)
+
+-- app access
+1. load user in database
+2. provide permisison (GEMI)
+
+-- user load in non-prod , instruct the to user to user usercreation url, that is deployed in the environment. Any issue in usercreation URL should be addressed by weblogic team.
+
+oper date update
+================
+-- updated by a job called close_dm which runs everyday 00.20 CET
+select max(ORDER_DATE) from INSIS_SYS_V10.UL_DAILY_ORDERS; -- date in screen
+SELECT date_value FROM INSIS_GEN_BLC_V10.BLC_VALUES where UPPER(SETTING) like '%OPER%DATE%'; -- date in billing activities
+
+
+REAL TIME SQL MONITORING:
+https://blogs.oracle.com/coretec/oracle-database-real-time-sql-monitoring-one-of-the-most-important-tools
+
+V$SQL_MONITOR
+V$SQL_PLAN_MONITOR
+combination of v$sql and v$session
+

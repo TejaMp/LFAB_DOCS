@@ -1,0 +1,129 @@
+BACKUP STATUS:
+++++++++++++++++
+SET LINESIZE 200
+SET PAGESIZE 100
+COL NAME FOR A16
+COL HOST_NAME FOR A20
+COL STATUS FOR A13
+COL END_TIME FOR A20
+COL START_TIME FOR A20
+COL OUTPUT_BYTES_DISPLAY FOR A15
+COL INPUT_BYTES_DISPLAY FOR A15
+COL TIME_TAKEN_DISPLAY FOR A12
+select
+b.host_name, c.name,
+a.input_type " LEVEL",
+a.status,
+to_char(start_time,'yyyy-mm-dd hh24:mi') start_time,
+to_char(end_time,'yyyy-mm-dd hh24:mi') end_time,a.INPUT_BYTES_DISPLAY,
+a.output_bytes_display,
+a.time_taken_display
+from v$rman_backup_job_details a, v$instance b, v$database c
+where start_time > sysdate-7;
+ 
+Check only full db backups 
+---------------------------
+ 
+SET LINESIZE 200
+SET PAGESIZE 100
+col START_TIME for a20
+col END_TIME for a20
+col OUTPUT_BYTES_DISPLAY for a15
+col INPUT_BYTES_DISPLAY for a15
+col TIME_TAKEN_DISPLAY for a15
+select session_key,
+input_type " LEVEL",
+status,
+to_char(start_time,'yyyy-mm-dd hh24:mi') start_time,
+to_char(end_time,'yyyy-mm-dd hh24:mi') end_time,INPUT_BYTES_DISPLAY,
+output_bytes_display,
+time_taken_display
+from v$rman_backup_job_details where INPUT_TYPE='DB INCR'
+order by session_key asc;
+
+SELECT TO_CHAR(completion_time, 'YYYY-MON-DD') completion_time, type, round(sum(bytes)/1048576) MB, round(sum(elapsed_seconds)/60) min
+FROM
+(
+SELECT
+CASE
+  WHEN s.backup_type='L' THEN 'ARCHIVELOG'
+  WHEN s.controlfile_included='YES' THEN 'CONTROLFILE'
+  WHEN s.backup_type='D' AND s.incremental_level=0 THEN 'LEVEL0'
+  WHEN s.backup_type='I' AND s.incremental_level=1 THEN 'LEVEL1'
+END type,
+TRUNC(s.completion_time) completion_time, p.bytes, s.elapsed_seconds
+FROM v$backup_piece p, v$backup_set s
+WHERE p.status='A' AND p.recid=s.recid
+UNION ALL
+SELECT 'DATAFILECOPY' type, TRUNC(completion_time), output_bytes, 0 elapsed_seconds FROM v$backup_copy_details
+)
+GROUP BY TO_CHAR(completion_time, 'YYYY-MON-DD'), type
+ORDER BY 1 ASC,2,3;
+
+
+set linesize 500 pagesize 2000
+col Hours format 9999.99
+col STATUS format a10
+select SESSION_KEY, INPUT_TYPE, STATUS,
+to_char(START_TIME,'mm-dd-yyyy hh24:mi:ss') as RMAN_Bkup_start_time,
+to_char(END_TIME,'mm-dd-yyyy hh24:mi:ss') as RMAN_Bkup_end_time,
+elapsed_seconds/3600 Hours from V$RMAN_BACKUP_JOB_DETAILS
+order by session_key;
+
+set linesize 500 pagesize 2000
+col Hours format 9999.99
+col STATUS format a10
+
+select SESSION_KEY,
+       INPUT_TYPE,
+       STATUS,
+       to_char(START_TIME,'mm-dd-yyyy hh24:mi:ss') as RMAN_Bkup_start_time,
+       to_char(END_TIME,'mm-dd-yyyy hh24:mi:ss') as RMAN_Bkup_end_time,
+       elapsed_seconds/3600 Hours
+from V$RMAN_BACKUP_JOB_DETAILS
+order by START_TIME desc;
+
+col STATUS format a10
+col hrs format 999.99
+
+select SESSION_KEY, INPUT_TYPE, STATUS,
+to_char(START_TIME,'mm/dd/yy hh24:mi') start_time,
+to_char(END_TIME,'mm/dd/yy hh24:mi') end_time,
+elapsed_seconds/3600 hrs from V$RMAN_BACKUP_JOB_DETAILS
+order by session_key;
+
+col STATUS format a9
+col hrs format 999.99
+select SESSION_KEY,SESSION_RECID,SESSION_STAMP, INPUT_TYPE, STATUS, to_char(START_TIME,'mm/dd/yy hh24:mi') start_time,
+to_char(END_TIME,'mm/dd/yy hh24:mi') end_time,
+elapsed_seconds/3600 hrs from V$RMAN_BACKUP_JOB_DETAILS
+order by session_key;
+
+col dbsize_mbytes      for 99,999,990.00 justify right head "DBSIZE_MB"
+col input_mbytes       for 99,999,990.00 justify right head "READ_MB"
+col output_mbytes      for 99,999,990.00 justify right head "WRITTEN_MB"
+col output_device_type for a10           justify left head "DEVICE"
+col complete           for 990.00        justify right head "COMPLETE %" 
+col compression        for 990.00        justify right head "COMPRESS|% ORIG"
+col est_complete       for a20           head "ESTIMATED COMPLETION"
+col recid              for 9999999       head "ID"
+
+select recid
+     , output_device_type
+     , dbsize_mbytes
+     , input_bytes/1024/1024 input_mbytes
+     , output_bytes/1024/1024 output_mbytes
+     , (output_bytes/input_bytes*100) compression
+     , (mbytes_processed/dbsize_mbytes*100) complete
+     , to_char(start_time + (sysdate-start_time)/(mbytes_processed/dbsize_mbytes),'DD-MON-YYYY HH24:MI:SS') est_complete
+  from v$rman_status rs
+     , (select sum(bytes)/1024/1024 dbsize_mbytes from v$datafile) 
+ where status='RUNNING'
+   and output_device_type is not null
+/
+                                                                 COMPRESS
+      ID DEVICE          DBSIZE_MB        READ_MB     WRITTEN_MB   % ORIG COMPLETE % 
+-------- ---------- -------------- -------------- -------------- -------- ---------- 
+     126 DISK         5,009,808.00   1,469,538.69     800,244.00    54.46      29.33 
+
+select sid,serial#,program from v$session where program like '%rman%';

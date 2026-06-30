@@ -1,0 +1,218 @@
+Identify db deployment issue for Lars Johanssen in FALCON
+Permission issue in UPGPT
+Add risk tables to goldengate in SIT
+ODL user issue
+SIT permission denied application issue
+Identify renewal issue in upgrade
+
+Configure backup to AT environment - SIT server - backup is configured by TCS Backup team in COMMVAULT - all we have to do is give details.
+
+Connect SQL server from Oracle - Mikael
+
+recover database from primary using service prod. 
+
+
+col username for a40
+SELECT s.sid, s.serial#, s.username, t.start_time, t.xidusn, t.xidslot, t.xidsqn, s.sql_id
+  FROM v$session s
+  JOIN v$transaction t 
+    ON s.saddr = t.ses_addr
+  and s.username not like 'ETTSAK%'
+  ORDER BY t.start_time;
+
+update /*+ streams or_expand() restrict_all_ref_cons  */
+"LIQUIBASE_USER"."DATABASECHANGELOG_ACTIONS" p set
+"AUTHOR"=decode(:1,'N',"AUTHOR",:2),
+"DEPLOYMENT_ID"=decode(:3,'N',"DEPLOYMENT_ID",:4),
+"FILENAME"=decode(:5,'N',"FILENAME",:6), "ID"=decode(:7,'N',"ID",:8),
+"SEQUENCE"=decode(:9,'N',"SEQUENCE",:10),
+"SQL"=sys.dbms_streams.get_final_lob(:11,"SQL",:12),
+"STATUS"=decode(:13,'N',"STATUS",:14),
+"SXML"=sys.dbms_streams.get_final_lob(:15,"SXML",:16) where (:17='N'
+or(1=1 and 1=1 and 1=1 and 1=1 and 1=1 and 1=1)) and(:18="AUTHOR"
+or(:18 is null and "AUTHOR" is null)) and(:19="DEPLOYMENT_ID" or(:19 is
+null and "DEPLOYMENT_ID" is null)) and(:20="FILENAME" or(:20 is null
+and "FILENAME" is null)) and(:21="ID") and(:22="SEQUENCE")
+and(:23="STATUS" or(:23 is null and "STATUS" is null))
+
+Plan hash value: 87138541
+
+-------------------------------------------------------------------------------------------------
+| Id  | Operation          | Name                      | E-Rows |E-Bytes| Cost (%CPU)| E-Time   |
+-------------------------------------------------------------------------------------------------
+|   0 | UPDATE STATEMENT   |                           |        |       |  3020 (100)|          |
+|   1 |  UPDATE            | DATABASECHANGELOG_ACTIONS |        |       |            |          |
+|*  2 |   TABLE ACCESS FULL| DATABASECHANGELOG_ACTIONS |      1 |   220 |  3020   (1)| 00:00:01 |
+-------------------------------------------------------------------------------------------------
+ 
+ 
+
+exec dbms_logstdby.skip('SCHEMA_DDL','LIQUIBASE_USER','%',null);
+exec dbms_logstdby.skip('DML','LIQUIBASE_USER','%',null);
+
+EVENT_TIME          STATUS                                        EVENT                                                            XIDUSN     XIDSLT     XIDSQN
+------------------- --------------------------------------------- ------------------------------------------------------------ ---------- ---------- ----------
+16-04-2026 15:58:46 ORA-01418: specified index does not exist     DROP INDEX insis_gen_v10.gen_riskrisks_grc_fk_ix                    115         26     282253
+ 
+
+  procedure skip_ORA_errors is
+      l_error     VARCHAR2(4000);
+      l_new_error VARCHAR2(4000);
+    BEGIN
+      -- Get the current error text from SQL Apply
+      dbms_logstdby_context.get_context(name  => 'ERROR', value => l_error);
+      -- Default: keep the original error
+      l_new_error := l_error;
+      -- If it's ORA-01418 (specified index does not exist), silently skip it
+      IF l_error IS NOT NULL AND SUBSTR(l_error, 5, 5) in ('01418','04063','00942') THEN
+        l_new_error := NULL;  -- tells SQL Apply: "treat this as no error"
+      END IF;
+      -- Hand the (possibly modified) error back to SQL Apply
+      dbms_logstdby_context.set_context(name  => 'NEW_ERROR', value => l_new_error);
+    END;
+ 
+ 
+ grant dba to ettsak_capt_privileged;
+
+BEGIN
+  DBMS_LOGSTDBY.SKIP_ERROR(
+    stmt        => 'DML',                         -- or 'SCHEMA_DDL' / 'INDEX_DDL' per Table 110-15
+    schema_name => '%',                          -- NULL = all schemas
+    object_name => '%',                          -- NULL = all objects
+    proc_name   => 'ettsak_capt_privileged.standby_apply_ctl.skip_ORA_errors',
+    use_like    => true
+  );
+END;
+/
+BEGIN
+  DBMS_LOGSTDBY.SKIP_ERROR(
+    stmt        => 'SCHEMA_DDL',                         -- or 'SCHEMA_DDL' / 'INDEX_DDL' per Table 110-15
+    schema_name => '%',                          -- NULL = all schemas
+    object_name => '%',                          -- NULL = all objects
+    proc_name   => 'ettsak_capt_privileged.standby_apply_ctl.skip_ORA_errors',
+    use_like    => true
+  );
+END;
+/
+
+ 
+
+select
+  s.sid,
+  s.serial#,
+  s.username,
+  s.status,
+  t.start_time,
+  s.sql_id,
+  (select replace(
+            replace(
+              replace(
+                replace(
+                  replace(
+                    replace(
+                      replace(
+                        xmlagg(
+                          xmlelement(e, p.plan_table_output || chr(10))
+                          order by rownum
+                        ).getclobval(),
+                        '<E>', ''),
+                      '</E>', ''),
+                    chr(38) || 'quot;', '"'),
+                  chr(38) || 'apos;', ''''),
+                chr(38) || 'gt;', '>'),
+              chr(38) || 'lt;', '<'),
+            chr(38) || 'amp;', chr(38))
+   from table(
+          dbms_xplan.display_cursor(
+            s.sql_id,
+            s.sql_child_number,
+            'basic'        -- or 'typical' / 'all'
+          )
+        ) p
+  ) as plan_text,
+  q.sql_text
+from   v$session     s
+join   v$transaction t
+  on s.saddr = t.ses_addr
+left join v$sql      q
+  on q.sql_id       = s.sql_id
+ and q.child_number = s.sql_child_number
+where  s.status = 'ACTIVE'
+  and  s.type   = 'USER'
+order  by t.start_time;
+
+
+
+alter database stop logical standby apply;
+/
+
+
+begin
+  -- skip all dml on jbpm6
+  dbms_logstdby.skip('DML',        'JBPM6', '%');
+
+  -- skip all ddl on objects in jbpm6
+  dbms_logstdby.skip('SCHEMA_DDL', 'JBPM6', '%');
+
+  -- skip all dml on jbpm7
+  dbms_logstdby.skip('DML',        'JBPM7', '%');
+
+  -- skip all ddl on objects in jbpm7
+  dbms_logstdby.skip('SCHEMA_DDL', 'JBPM7', '%');
+end;
+/
+
+select *
+from   dba_logstdby_skip
+where  owner in ('JBPM6','JBPM7');
+
+
+alter database start logical standby apply immediate;
+/
+
+correct code:
+alter database stop logical standby apply;
+/
+
+
+begin
+  -- skip all dml on jbpm6
+  dbms_logstdby.skip('DML',        'INSIS_JBPM6', '%');
+
+  -- skip all ddl on objects in jbpm6
+  dbms_logstdby.skip('SCHEMA_DDL', 'INSIS_JBPM6', '%');
+
+  -- skip all dml on jbpm7
+  dbms_logstdby.skip('DML',        'INSIS_JBPM7', '%');
+
+  -- skip all ddl on objects in jbpm7
+  dbms_logstdby.skip('SCHEMA_DDL', 'INSIS_JBPM7', '%');
+end;
+/
+
+
+APPLY PROCESS CHANGES TO MORE:
+
+select *
+from   dba_logstdby_skip
+where  owner in ('INSIS_JBPM6','INSIS_JBPM7');
+
+
+alter database start logical standby apply immediate;
+/
+
+alter database stop logical standby apply;
+/
+
+begin
+  -- upper bound on SQL Apply servers (coordinator + workers)
+  dbms_logstdby.apply_set('MAX_SERVERS',   20);
+
+  -- requested number of apply workers (AP n)
+  dbms_logstdby.apply_set('APPLY_SERVERS', 14);
+end;
+/
+
+-- restart SQL Apply
+alter database start logical standby apply immediate;
+/  

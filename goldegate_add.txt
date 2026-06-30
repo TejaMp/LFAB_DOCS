@@ -1,0 +1,11 @@
+DBLogin UserIDAlias oggadmin
+
+register extract INEDW database
+
+add extract INEDW, INTEGRATED tranlog, begin now
+
+ADD EXTTRAIL /g01/gghome/product/ogg19c/dirdat/ie, EXTRACT INEDW
+
+Add replicat INRDW exttrail /g01/gghome/product/ogg19c/dirdat/ie CHECKPOINTTABLE ggadmin.GG_CHECKPOINT
+
+ 

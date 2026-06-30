@@ -1,0 +1,49 @@
+As a DBA, I want archived logs on the LGLSTDBY logical standby database to be automatically deleted after they are applied, so that disk space is efficiently managed.
+
+Description:
+Currently, the LGLSTDBY database is configured as a logical standby for the UPGSIT primary database. It continuously receives and applies archived redo logs to stay in sync with the primary. To prevent disk space issues, it is important that these logs are cleaned up after they have been applied.
+
+Oracle provides the LOG_AUTO_DELETE parameter, which, when enabled, should automatically delete archived logs that are no longer needed. However, even after enabling this parameter, I have observed that the logs are not being deleted as expected, leading to potential disk space concerns.
+
+-Archived logs are automatically deleted from the logical standby after they are applied.
+-Disk space is maintained within acceptable thresholds.
+-The process is automated and does not require manual intervention.
+
+Issue Identified:
+LOG_AUTO_DELETE is not deleting foreign archived logs because of a mismatch between records in the controlfile and the system.logmnr_log$ table. Additionally, foreign archived logs stored in the FRA (Fast Recovery Area) cannot be auto-deleted.
+
+​Oracle Recommendations:
+
+1. Separate Archive Destinations:
+Configure two separate archive destinations:
+One (e.g., log_archive_dest_1) for local/online logfiles in FRA.
+Another (e.g., log_archive_dest_3) for standby logfiles in a location outside the FRA.
+Refer: Foreign Archived Logs Not Being Deleted On Logical Standby ( Doc ID 2304461.1 )
+
+Example:
+
+SQL> alter system set log_archive_dest_1 = 'LOCATION=USE_DB_RECOVERY_FILE_DEST VALID_FOR=(ALL_ROLES,ONLINE_LOGFILES) DB_UNIQUE_NAME=<DB_UNIQUE_NAME>';
+
+SQL> alter system set log_archive_dest_3 = 'LOCATION=<somewhere other than FRA> VALID_FOR=(STANDBY_LOGFILES,STANDBY_ROLE) DB_UNIQUE_NAME=<DB_UNIQUE_NAME>' ;
+
+2. Clean Up system.logmnr_log$ Table:
+-Backup the relevant records from system.logmnr_log$ for the affected thread.
+-Delete all records for the affected thread from system.logmnr_log$.
+-Restart logical standby apply and toggle LOG_AUTO_DELETE off and on.
+-Set the retention target as needed.
+-Start logical standby apply and verify if logs are being deleted.
+
+SQL>create table system.bak_logmnr_log as (select * from system.logmnr_log$ where thread#=1);
+
+SQL>delete from system.logmnr_log$ where thread#=1;
+commit;
+
+SQL>alter database stop logical standby apply;
+
+SQL>EXECUTE DBMS_LOGSTDBY.APPLY_SET('LOG_AUTO_DELETE', 'FALSE');
+
+SQL>EXECUTE DBMS_LOGSTDBY.APPLY_SET('LOG_AUTO_DELETE', 'TRUE');
+
+SQL>exec dbms_logstdby.apply_set('LOG_AUTO_DEL_RETENTION_TARGET',60);
+
+SQL>alter database start logical standby apply immediate;

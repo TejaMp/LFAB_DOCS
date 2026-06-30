@@ -1,0 +1,30 @@
+set lines 200
+col name for a80
+SELECT name, first_time, sequence#
+FROM v$archived_log
+WHERE deleted = 'NO'
+ORDER BY first_time desc;
+
+select * from V$ARCHIVE_DEST;
+
+SHOW PARAMETER LOG_ARCHIVE_DEST;
+SHOW PARAMETER LOG_ARCHIVE_CONFIG;
+SHOW PARAMETER DB_UNIQUE_NAME;
+SHOW PARAMETER DG_BROKER_START;
+
+PRIMARY (ESAKDB)
+  |
+  |-- Generates redo --> Online Redo Logs --> Archive Logs
+  |
+  |-- Ships redo to Standby via Oracle Net
+        |
+        |-- PHYSICAL STANDBY (INSISDR)
+        |     |-- Receives redo --> Standby Redo Logs --> Archive Logs
+        |     |-- Redo Apply (block-level)
+        |
+        |-- LOGICAL STANDBY (ESAKLG)
+              |-- Receives redo --> Standby Redo Logs --> Archive Logs
+              |-- SQL Apply (statement-level)
+              |-- Can be open for reporting
+			 
+

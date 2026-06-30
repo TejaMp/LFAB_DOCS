@@ -1,0 +1,7 @@
+Filetering disabled in e75lrl3046v:
+
+[grid@e75lrl3046v bin]$ asmcmd afd_state
+ASMCMD-9526: The AFD state is 'LOADED' and filtering is 'ENABLED' on host 'e75lrl3046v.lfnet.se'
+[grid@e75lrl3046v bin]$ asmcmd afd_filter -d --all
+[grid@e75lrl3046v bin]$ asmcmd afd_state
+ASMCMD-9526: The AFD state is 'LOADED' and filtering is 'DISABLED' on host 'e75lrl3046v.lfnet.se'

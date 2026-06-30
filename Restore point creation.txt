@@ -1,0 +1,267 @@
+take a copy of pfile from spfile
+
+create pfile='/prstst/export/initPRSPRE.ora' from spfile;
+
+1. Enable flashback, database should be in archive mode and define flash recovery area.
+
+select log_mode from v$database;
+
+shut immediate;
+startup mount;
+alter database archivelog;
+alter database open;
+
+	select flashback_on from v$database;
+	alter system set db_recovery_file_dest_size=998G
+	alter system set db_recovery_file_dest=/iomprd/temp
+	show parameter db_recovery_file
+	alter database flashback on;
+
+2. create restore point.
+	create restore point before_upgrade GUARANTEE FLASHBACK DATABASE;
+	set lines 300 long 9999999 pages 400
+	col name for a25
+	col SCN for 9999999999999999
+	col STORAGE_SIZE for 99999999999999
+	Select name,SCN,TIME,DATABASE_INCARNATION# DI,GUARANTEE_FLASHBACK_DATABASE,STORAGE_SIZE from V$RESTORE_POINT;
+	
+	set lines 300
+	set pages 400
+	col name for a25
+	col TIME for a40
+	col SCN for 9999999999999999
+	col STORAGE_SIZE for 99999999999999
+	col STORAGE_SIZE_GB for 999,999,999.99
+
+	SELECT
+		name,
+		SCN,
+		TIME,
+		DATABASE_INCARNATION# AS DI,
+		GUARANTEE_FLASHBACK_DATABASE,
+		STORAGE_SIZE,
+		ROUND(STORAGE_SIZE / (1024*1024*1024), 2) AS STORAGE_SIZE_GB
+	FROM
+		V$RESTORE_POINT;
+		
+CREATE RESTORE POINT RP_AUTO_ENDEAVOR GUARANTEE FLASHBACK DATABASE;
+	
+ACTUAL FRA USAGE:
+====================
+SELECT
+  NAME,
+  SPACE_LIMIT/1024/1024/1024 AS FRA_SIZE_GB,
+  SPACE_USED/1024/1024/1024 AS FRA_USED_GB,
+  NUMBER_OF_FILES,
+  ROUND(SPACE_USED/SPACE_LIMIT*100, 2) AS USED_PERCENT
+FROM V$RECOVERY_FILE_DEST;
+
+col name for a20
+select
+   name,
+  floor(space_limit / 1024 / 1024/1024) "Size GB",
+  ceil(space_used / 1024 / 1024/1024) "Used GB",
+  number_of_files,
+  ROUND(SPACE_USED/SPACE_LIMIT*100, 2) AS USED_PERCENT
+from v$recovery_file_dest;
+
+ 
+
+set lines 200
+col FILE_TYPE for a30
+select FILE_TYPE,PERCENT_SPACE_USED,PERCENT_SPACE_RECLAIMABLE,NUMBER_OF_FILES from V$FLASH_RECOVERY_AREA_USAGE;
+
+asmcmd lsdg | awk 'NR==1{print "Name\tTotal_GB\tFree_GB\tUsable_GB\tPercent_Used"} NR>1{used=($8-$9)/1024; total=$8/1024; percent=(used/total)*100; printf "%s\t%.2f\t%.2f\t%.2f\t%.2f%%\n", $14, total, $9/1024, $11/1024, percent}'
+
+ARCHIVE LOG - deleted or present data from past 30 days:
+
+DELETE ARCHIVELOG ALL COMPLETED BEFORE 'SYSDATE-18';
+
+ALTER SYSTEM SET db_recovery_file_dest_size = 2500G SCOPE=BOTH;
+================================================
+SELECT TRUNC(COMPLETION_TIME) AS LOG_DATE,
+       DELETED,
+       COUNT(*) AS LOG_COUNT
+FROM V$ARCHIVED_LOG
+WHERE COMPLETION_TIME >= SYSDATE - 30
+GROUP BY TRUNC(COMPLETION_TIME), DELETED
+ORDER BY LOG_DATE, DELETED; 
+
+
+CREATE RESTORE POINT DEPLOY_CUSTDB_RP GUARANTEE FLASHBACK DATABASE;
+
+CREATE RESTORE POINT RP_PREPROD_2703 GUARANTEE FLASHBACK DATABASE;
+
+SQL> select log_mode from v$database;
+
+drop restore point BEFORE_UPGRADE;
+alter database flashback off;
+alter system set db_recovery_file_dest='';
+alter system set db_recovery_file_dest_size='1';
+shut immediate;
+startup mount;
+alter database noarchivelog;
+alter database open;
+
+LOG_MODE
+------------
+ARCHIVELOG
+
+SQL> select flashback_on from v$database;
+
+FLASHBACK_ON
+------------------
+NO
+after set it to ON
+SQL> select flashback_on from v$database;
+
+FLASHBACK_ON
+------------------
+YES
+
+SQL> Select name,SCN,TIME,DATABASE_INCARNATION# DI,GUARANTEE_FLASHBACK_DATABASE,STORAGE_SIZE from V$RESTORE_POINT;
+
+NAME
+--------------------------------------------------------------------------------
+       SCN
+----------
+TIME
+---------------------------------------------------------------------------
+        DI GUA STORAGE_SIZE
+---------- --- ------------
+BEFORE_UPGRADE
+4.8404E+12
+01-DEC-21 01.24.31.000000000 PM
+         2 YES    104857600
+		 
+SQL> Select name,SCN,TIME,DATABASE_INCARNATION# DI,GUARANTEE_FLASHBACK_DATABASE,STORAGE_SIZE from V$RESTORE_POINT;
+
+NAME                   SCN TIME                                                                                DI GUA STORAGE_SIZE
+--------------- ---------- --------------------------------------------------------------------------- ---------- --- ------------
+RP_AUTO_PREPROD 2.7146E+11 04-DEC-25 11.10.33.000000000 AM                                                      2 YES    838860800
+
+SELECT SPACE_LIMIT, SPACE_USED, SPACE_RECLAIMABLE, NUMBER_OF_FILES FROM V$RECOVERY_FILE_DEST;
+
+SELECT NAME, STATE, TYPE, TOTAL_MB, FREE_MB FROM V$ASM_DISKGROUP;
+
+SHOW PARAMETER log_archive_dest
+
+SELECT FLASHBACK_ON FROM V$DATABASE;
+
+IOMPRD> archive log list;
+Database log mode              Archive Mode
+Automatic archival             Enabled
+Archive destination            /oracle/admin/IOMPRD/arch
+Oldest online log sequence     339076
+Next log sequence to archive   339080
+Current log sequence           339080
+
+Primary database: chicago
+Standby database: boston
+
+Create Guaranteed Restore Point
+
+1. Stop redo transport and redo apply
+a) If broker is not configured:
+On primary database:
+SQL> alter system set log_archive_dest_state_n='defer';
+Here, replace n with the corresponding number for remote destinations.
+On standby database:
+SQL> alter database recover managed standby database cancel;
+
+b) If broker is in place in DGMGRL /:
+edit database iomprd set state = 'TRANSPORT-OFF';
+edit database iomsmp set state = 'APPLY-OFF';
+
+2. Set GRP in standby database.
+On standby database:
+SQL> CREATE RESTORE POINT IOMPRD_RESTORE GUARANTEE FLASHBACK DATABASE;
+3. Set GRP in primary database.
+
+On primary database:
+SQL> CREATE RESTORE POINT grp_dg GUARANTEE FLASHBACK DATABASE;
+
+4. Enable redo transport and redo apply.
+a) If broker is not configured:
+On primary database:
+SQL> alter system set log_archive_dest_state_n='enable';
+Here, replace n with the corresponding number for remote destinations.
+On standby database:
+SQL> alter database recover managed standby database using current logfile disconnect;
+
+b) If broker is in place:
+DGMGRL> edit database iomprd set state = 'TRANSPORT-ON';
+DGMGRL> edit database iomsmp set state = 'APPLY-ON';
+
+Flashback Database to Guaranteed Restore Point
+1. Stop redo transport and redo apply.
+a) If broker is not configured:
+On primary database:
+SQL> alter system set log_archive_dest_state_n='defer';
+Here, replace n with the corresponding number for remote destinations.
+On standby database:
+SQL> alter database recover managed standby database cancel;
+b) If broker is in place:
+DGMGRL> edit database chicago set state = 'TRANSPORT-OFF';
+DGMGRL> edit database boston set state = 'APPLY-OFF';
+2. Shutdown Primary Database and start one instance in mount stage.
+3. Flashback primary database to restore point.
+On primary database:
+SQL> flashback database to RESTORE POINT grp_dg;
+SQL> alter database open resetlogs;
+4. Shutdown Standby database and start one instance in mount stage.
+
+5. Flashback standby database.
+
+On standby database:
+SQL> flashback database to RESTORE POINT grp_dg;
+
+6. Enable redo transport and redo apply.
+a) If broker is not configured:
+On primary database:
+SQL> alter system set log_archive_dest_state_n='enable';
+Here, replace n with the corresponding number for remote destinations.
+On standby database:
+SQL> alter database recover managed standby database using current logfile disconnect;
+b) If broker is in place:
+DGMGRL> edit database chicago set state = 'TRANSPORT-ON';
+DGMGRL> edit database boston set state = 'APPLY-ON';
+7. If Active Data Guard licence is used, open read only the standby database.
+
+
+Drop Guaranteed Restore Point
+1. Stop redo transport and redo apply.
+a) If broker is not configured:
+On primary database:
+SQL> alter system set log_archive_dest_state_n='defer';
+Here, replace n with the corresponding number for remote destinations.
+On standby database:
+SQL> alter database recover managed standby database cancel;
+
+
+b) If broker is in place:
+DGMGRL> edit database chicago set state = 'TRANSPORT-OFF';
+DGMGRL> edit database boston set state = 'APPLY-OFF';
+
+2. Drop GRP in primary database.
+On primary database:
+SQL> drop RESTORE POINT grp_dg;
+
+3. Drop GRP in standby database.
+Ensure the standby database is in mount stage and drop GRP:
+
+SQL> drop restore point grp_dg;
+
+If Active Data Guard licence is used, open read only the standby database after dropping the GRP.
+
+4. Enable redo transport and redo apply
+a) If broker is not configured:
+On primary database:
+SQL> alter system set log_archive_dest_state_n='enable';
+Here, replace n with the corresponding number for remote destinations.
+On standby database:
+SQL> alter database recover managed standby database using current logfile disconnect;
+
+b) If broker is in place:
+DGMGRL> edit database chicago set state = 'TRANSPORT-ON';
+DGMGRL> edit database boston set state = 'APPLY-ON';
