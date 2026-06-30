@@ -1,0 +1,73 @@
+1.add table in extract paramter file and restart extract
+TABLE INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED;
+
+
+2.export table from prod
+expdp \"/ as sysdba\" tables=INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED directory=DATA_PUMP_DIR dumpfile=BATCH_JOB_RECORDS_PROCESSED.dmp VERSION=19.0.0 logfile=BATCH_JOB_RECORDS_PROCESSED_exp.log  
+
+
+[oracle@e75lrl1054 export]$ expdp \"/ as sysdba\" tables=INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED directory=DATA_PUMP_DIR dumpfile=BATCH_JOB_RECORDS_PROCESSED.dmp VERSION=19.0.0 logfile=BATCH_JOB_RECORDS_PROCESSED_exp.log
+
+Export: Release 19.0.0.0.0 - Production on Mon Feb 20 11:23:35 2023
+Version 19.8.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Connected to: Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+FLASHBACK automatically enabled to preserve database integrity.
+Starting "SYS"."SYS_EXPORT_TABLE_03":  "/******** AS SYSDBA" tables=INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED directory=DATA_PUMP_DIR dumpfile=BATCH_JOB_RECORDS_PROCESSED.dmp VERSION=19.0.0 logfile=BATCH_JOB_RECORDS_PROCESSED_exp.log
+Processing object type TABLE_EXPORT/TABLE/TABLE_DATA
+Processing object type TABLE_EXPORT/TABLE/INDEX/STATISTICS/INDEX_STATISTICS
+Processing object type TABLE_EXPORT/TABLE/STATISTICS/TABLE_STATISTICS
+Processing object type TABLE_EXPORT/TABLE/STATISTICS/MARKER
+Processing object type TABLE_EXPORT/TABLE/PROCACT_INSTANCE
+Processing object type TABLE_EXPORT/TABLE/TABLE
+Processing object type TABLE_EXPORT/TABLE/INDEX/INDEX
+Processing object type TABLE_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
+. . exported "INSIS_ADMIN_LF"."BATCH_JOB_RECORDS_PROCESSED"  8.359 KB      56 rows
+ORA-39173: Encrypted data has been stored unencrypted in dump file set.
+Master table "SYS"."SYS_EXPORT_TABLE_03" successfully loaded/unloaded
+******************************************************************************
+Dump file set for SYS.SYS_EXPORT_TABLE_03 is:
+  /bkp/export/BATCH_JOB_RECORDS_PROCESSED.dmp
+Job "SYS"."SYS_EXPORT_TABLE_03" successfully completed at Mon Feb 20 11:24:55 2023 elapsed 0 00:01:18
+
+
+
+3. import table into replica
+impdp \"/ as sysdba\" tables=INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED directory=DATA_PUMP_DIR dumpfile=BATCH_JOB_RECORDS_PROCESSED.dmp logfile=BATCH_JOB_RECORDS_PROCESSED_imp.log 
+
+
+[oracle@e75lrl2036 export]$ impdp \"/ as sysdba\" tables=INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED directory=DATA_PUMP_DIR dumpfile=BATCH_JOB_RECORDS_PROCESSED.dmp logfile=BATCH_JOB_RECORDS_PROCESSED_imp.log
+
+Import: Release 19.0.0.0.0 - Production on Mon Feb 20 11:28:59 2023
+Version 19.8.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Connected to: Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Master table "SYS"."SYS_IMPORT_TABLE_01" successfully loaded/unloaded
+Starting "SYS"."SYS_IMPORT_TABLE_01":  "/******** AS SYSDBA" tables=INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED directory=DATA_PUMP_DIR dumpfile=BATCH_JOB_RECORDS_PROCESSED.dmp logfile=BATCH_JOB_RECORDS_PROCESSED_imp.log
+Processing object type TABLE_EXPORT/TABLE/PROCACT_INSTANCE
+Processing object type TABLE_EXPORT/TABLE/TABLE
+Processing object type TABLE_EXPORT/TABLE/TABLE_DATA
+. . imported "INSIS_ADMIN_LF"."BATCH_JOB_RECORDS_PROCESSED"  8.359 KB      56 rows
+Processing object type TABLE_EXPORT/TABLE/INDEX/INDEX
+Processing object type TABLE_EXPORT/TABLE/CONSTRAINT/CONSTRAINT
+Processing object type TABLE_EXPORT/TABLE/INDEX/STATISTICS/INDEX_STATISTICS
+Processing object type TABLE_EXPORT/TABLE/STATISTICS/TABLE_STATISTICS
+Processing object type TABLE_EXPORT/TABLE/STATISTICS/MARKER
+Job "SYS"."SYS_IMPORT_TABLE_01" successfully completed at Mon Feb 20 11:29:21 2023 elapsed 0 00:00:21
+
+
+
+4.add entry in replicat paramter file and restart replicat
+MAP INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED,TARGET INSIS_ADMIN_LF.BATCH_JOB_RECORDS_PROCESSED;
+
+
+
+
+
+
+
+
