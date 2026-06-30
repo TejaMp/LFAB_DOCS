@@ -1,0 +1,109 @@
+1.	Stop GG process 
+/GGhome/GGhome/product/ogg19c/
+./ggsci
+info all
+Stop *
+stop manager
+info all
+
+5. Primary Database: Clear Blocking Scheduler Jobs
+
+    -- Step 1: Check and stop the job queue
+    
+  SHOW PARAMETER job_queue_processes;
+  ALTER SYSTEM SET job_queue_processes = 0 SCOPE=BOTH;
+      => Blocks new jobs from starting, resume after switchover!
+
+    -- Step 2: List All Active (Non-SYS) Scheduler Jobs
+    COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+    -- Step 3: Generate Disable Statements
+    SELECT 'EXECUTE DBMS_SCHEDULER.DISABLE(''' || owner || '.' || job_name || ''');'
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+    -- Step 4: Manually Stop Jobs if Needed (example)
+    BEGIN
+      DBMS_SCHEDULER.STOP_JOB('INSIS_CUST.RUN_CHAIN$UDP_CHAI3578');
+    END;
+    /
+
+    *Note: Always record which jobs you disable or stop, and return them to their original states post-switchover.
+
+b. Kill any active sessions
+
+disable apex jobs
+
+6. Shutting Down Extra RAC Instances Before Switchover
+
+    -- On Primary:
+    srvctl stop instance -d <db_unique_name> -i <instance2_name>
+      OR
+    sqlplus / as sysdba
+    SHUTDOWN IMMEDIATE;
+
+    -- On Standby:
+    srvctl stop instance -d <db_unique_name> -i <standby_instance2_name>
+      OR
+    sqlplus / as sysdba
+    SHUTDOWN IMMEDIATE;
+
+srvctl stop instance -d ESAKDB -i ESAKDB2 -o immediate
+
+srvctl stop instance -d INSISDR -i INSISDR2 -o immediate
+
+how database insisdr 'LogArchiveTrace';  --0 (original value)
+
+show database insisdb 'LogArchiveTrace';  --0 (original value)
+ 
+DGMGRL> edit configuration set property tracelevel=support;
+
+edit configuration set property tracelevel=USER;
+DGMGRL> edit database INSISDR set property LogArchiveTrace=8191;
+
+DGMGRL> edit database INSISDB set property LogArchiveTrace=8191;
+ 
+for RAC instance,
+
+
+
+ 
+DGMGRL> show database esakdb 'LogArchiveTrace';
+
+  LogArchiveTrace = '0'
+
+DGMGRL> show configuration TraceLevel;
+
+  TraceLevel = 'USER'
+
+ 
+edit instance 'INSISDR1' on database 'INSISDR' set property LogArchiveTrace = 8191;
+edit instance 'ESAKDB1' on database 'ESAKDB' set property LogArchiveTrace = 8191;
+
+edit instance 'INSISDR1' on database 'INSISDR' set property LogArchiveTrace = 0;
+edit instance 'ESAKDB1' on database 'ESAKDB' set property LogArchiveTrace = 0;
+
+---correct one
+	
+	SHOW INSTANCE 'ESAKDB1' LogArchiveTrace ON DATABASE 'ESAKDB';
+    SHOW INSTANCE 'INSISDR1' LogArchiveTrace ON DATABASE 'INSISDR';
+	
+	
+	-- Sets: service="esakdb"
+EDIT DATABASE 'ESAKDB' SET PROPERTY DGConnectIdentifier = 'esakdb';
+
+-- Sets: db_unique_name="esakdb"
+EDIT DATABASE 'ESAKDB' SET PROPERTY DBUniqueName = 'esakdb';
+
+-- Sets: ASYNC NOAFFIRM delay=0 optional max_failure=0 reopen=300 net_timeout=30
+EDIT DATABASE 'ESAKDB' SET PROPERTY LogXptMode = 'ASYNC';
+EDIT DATABASE 'ESAKDB' SET PROPERTY DelayMins = 0;
+EDIT DATABASE 'ESAKDB' SET PROPERTY MaxFailure = 0;
+EDIT DATABASE 'ESAKDB' SET PROPERTY ReopenSecs = 300;
+EDIT DATABASE 'ESAKDB' SET PROPERTY NetTimeout = 30;

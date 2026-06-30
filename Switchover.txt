@@ -1,0 +1,3046 @@
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Data Guard Switchover Checklist
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+1.	Stop GG process 
+/GGhome/GGhome/product/ogg19c/
+./ggsci
+info all
+Stop *
+stop manager
+info all
+
+
+4-0003002526
+
+
+Primary:
+======
+select   thread#, max(sequence#) "Last Primary Seq Generated"  
+           from     v$archived_log val, v$database vdb
+           where    val.resetlogs_change# = vdb.resetlogs_change#
+           group by thread# order by 1;
+
+set lines 300
+SELECT thread#, dest_id, gvad.status, error, fail_sequence FROM gv$archive_dest gvad, gv$instance gvi WHERE gvad.inst_id = gvi.inst_id AND destination is NOT NULL ORDER BY thread#, dest_id;
+                  
+Standby:
+=======
+
+select   thread#, max(sequence#) "Last Standby Seq Received"  
+           from     v$archived_log val, v$database vdb
+           where    val.resetlogs_change# = vdb.resetlogs_change#
+           group by thread# order by 1;
+
+select    thread#, max(sequence#) "Last Standby Seq Applied"
+           from     v$archived_log val, v$database vdb
+           where    val.resetlogs_change# = vdb.resetlogs_change#
+           and      val.applied in ('YES','IN-MEMORY')
+           group by thread# order by 1;
+
+select process,thread#,sequence#,status from gv$managed_standby;
+
+
++++++++++++++
+
+Run on Primary
+================
+ 
+
+
+1. Pre-Switchover Checks
+-------------------------
+
+A. Verify Data Guard Broker Configuration (DGMGRL)
+
+    show configuration;
+    show database <primary>;
+    show database ESKADB;
+    show database <standby>;
+    show database INSISDR;
+    show database 'ESAKDB' logxptstatus;
+    show database 'ESAKDB' inconsistentlogxptprops;
+    show database verbose ESAKDB;
+    show database verbose INSISDR;
+    validate database ESAKDB;
+    validate database INSISDR;
+
+B. Check Data Guard Log Gaps and Database Roles (SQL on PRIMARY)
+
+    SELECT status, gap_status 
+      FROM v$archive_dest_status 
+     WHERE dest_id = 2;   -- Should show NO GAP
+
+    SELECT name, log_mode, controlfile_type, open_mode, database_role, switchover_status 
+      FROM gv$database;
+
+Run on Primary :
+=================
+
+SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", 
+(ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM V$ARCHIVED_LOG WHERE 
+(THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,
+(SELECT THREAD# ,SEQUENCE# FROM V$LOG_HISTORY WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) 
+FROM V$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD# = APPL.THREAD# ORDER BY 1;
+ 
+Run on Standby
+===============
+ 
+SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", 
+(ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM V$ARCHIVED_LOG WHERE (THREAD#,FIRST_TIME ) 
+IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,(SELECT THREAD# ,
+SEQUENCE# FROM V$LOG_HISTORY WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) 
+FROM V$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD# = APPL.THREAD# ORDER BY 1;
+
+
+
+
+
+2. Tempfiles Consistency on Both Databases (SQL)
+
+    COL name FOR a60
+    SELECT ts#, name, status FROM v$tempfile;
+    -- Run above on both primary and standby. Tempfile count, TS name, and status should match.
+
+    /* Detailed Tempfile and Tablespace Names */
+    COL filename FOR a60
+	SELECT tf.name filename, bytes/1024/1024, ts.name tablespace
+      FROM v$tempfile tf, v$tablespace ts
+     WHERE tf.ts# = ts.ts#;
+
+3. Archive Log Sequence Synchronization
+
+    (A) On PRIMARY: Last Sequence Generated
+    
+SELECT thread#, MAX(sequence#) "Last Primary Seq Generated"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+     GROUP BY thread#
+     ORDER BY 1;
+
+    (B) On STANDBY: Last Sequence Received
+    
+SELECT thread#, MAX(sequence#) "Last Standby Seq Received"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+     GROUP BY thread#
+     ORDER BY 1;
+
+    (C) On STANDBY: Last Sequence Applied
+    
+SELECT thread#, MAX(sequence#) "Last Standby Seq Applied"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+       AND val.applied IN ('YES','IN-MEMORY')
+     GROUP BY thread#
+     ORDER BY 1;
+
+4. Check for Offline Datafiles (on Primary)
+
+    SELECT name FROM v$datafile WHERE status = 'OFFLINE';
+    -- Should return no rows! All datafiles must be ONLINE for switchover.
+
+5. Primary Database: Clear Blocking Scheduler Jobs
+
+    -- Step 1: Check and stop the job queue
+    
+  SHOW PARAMETER job_queue_processes;
+  ALTER SYSTEM SET job_queue_processes = 640 SCOPE=BOTH;
+      => Blocks new jobs from starting, resume after switchover!
+
+    -- Step 2: List All Active (Non-SYS) Scheduler Jobs
+    COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+    -- Step 3: Generate Disable Statements
+    SELECT 'EXECUTE DBMS_SCHEDULER.DISABLE(''' || owner || '.' || job_name || ''');'
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+	 
+	 SELECT 'EXECUTE DBMS_SCHEDULER.enable(''' || owner || '.' || job_name || ''');'
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+    -- Step 4: Manually Stop Jobs if Needed (example)
+    BEGIN
+      DBMS_SCHEDULER.STOP_JOB('INSIS_CUST.RUN_CHAIN$UDP_CHAI3578');
+    END;
+    /
+    --
+	
+	EXEC DBMS_SCHEDULER.ENABLE('"INSIS_SCHEDULER"."test_timeoutjob"');
+    EXEC DBMS_SCHEDULER.ENABLE('"INSIS_SCHEDULER"."test_approletimeout"');
+    
+	
+	*Note: Always record which jobs you disable or stop, and return them to their original states post-switchover.
+
+b. Kill any active sessions
+
+disable apex jobs
+
+6. Shutting Down Extra RAC Instances Before Switchover
+
+    -- On Primary:
+    srvctl stop instance -d <db_unique_name> -i <instance2_name>
+      OR
+    sqlplus / as sysdba
+    SHUTDOWN IMMEDIATE;
+
+    -- On Standby:
+    srvctl stop instance -d <db_unique_name> -i <standby_instance2_name>
+      OR
+    sqlplus / as sysdba
+    SHUTDOWN IMMEDIATE;
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Switchover Tuning Steps 
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+1. Disable Standby Apply Delay (delaymins)
+
+    -- (If configured, removes log apply lag to speed up switchover)
+    DGMGRL> EDIT DATABASE 'INSISDR' SET PROPERTY delaymins = 0;
+    DGMGRL> SHOW DATABASE 'INSISDR' delaymins;
+
+2. Enable Data Guard Broker Tracing
+
+    DGMGRL> connect sys@ESAKDB
+    DGMGRL> EDIT CONFIGURATION SET PROPERTY traceLevel = 'SUPPORT';
+    DGMGRL> show configuration TraceLevel;
+    
+
+3. Enable LogArchiveTrace for Deep Diagnostics (especially if RAC)
+
+    DGMGRL> connect sys@ESAKDB
+    DGMGRL> edit instance 'ESAKDB1' on database 'ESAKDB' set property LogArchiveTrace = 8191;
+    DGMGRL> edit instance 'INSISDR1' on database 'INSISDR' set property LogArchiveTrace = 8191;
+
+    -- To verify:
+    DGMGRL> SHOW INSTANCE 'ESAKDB1' LogArchiveTrace ON DATABASE 'ESAKDB';
+	DGMGRL> SHOW INSTANCE 'INSISDR1' LogArchiveTrace ON DATABASE 'INSISDR';
+	
+	
+	
+	
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Performing the Switchover
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+1. Connect to DGMGRL (Data Guard Broker CLI):
+
+    $ dgmgrl
+    DGMGRL> connect sys@ESAKDB
+	
+	connect sys/**********@ESAKDB
+
+2. Initiate the switchover:
+
+    DGMGRL> switchover to INSISDR
+
+    => INSISDR should be the configured standby's broker name.
+    => DGMGRL will coordinate the role switch (Primary <-> Standby).
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        Post-Switchover Verification
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Run this on BOTH the new primary and new standby databases:
+
+    SELECT name, log_mode, CONTROLFILE_TYPE, open_mode, database_role, switchover_status
+      FROM gv$database;
+	  
+col HOST_NAME for a30	  
+SELECT 
+    i.instance_name,
+    i.host_name,
+    d.name, 
+    d.log_mode, 
+    d.controlfile_type, 
+    d.open_mode, 
+    d.database_role, 
+    d.switchover_status
+FROM 
+    gv$database d
+JOIN 
+    gv$instance i ON d.inst_id = i.inst_id;
+
+
+-- Verify:
+   * Roles are switched: database_role = 'PRIMARY' on the new primary, 'PHYSICAL STANDBY' on the new standby
+   * open_mode is correct: 'READ WRITE' (primary), 'READ ONLY WITH APPLY' (standby)
+   * log_mode is 'ARCHIVELOG'
+   * switchover_status should be a valid value (not 'NOT ALLOWED')
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Notes:
+
+- Restore any parameters temporarily changed (e.g. job_queue_processes, delaymins, tracing levels)
+- Restart stopped scheduler jobs as required.
+- Re-start any RAC instances you shut down.
+
+
+ISSUES RESOLVED: 
+++++++++++++++++++
+
+We have faced thos below issues :
+
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    Error: ORA-16810: multiple errors or warnings detected for the member
+
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+    Error: ORA-16810: multiple errors or warnings detected for the member
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 53 seconds ago)
+
+Solution :
+
+DGMGRL> show database INSISDR redoroutes
+  RedoRoutes = '(LOCAL : ESAKLG ASYNC)'
+ 
+edit database INSISDR set property RedoRoutes = '(LOCAL : ESAKLG ASYNC, ESAKDB ASYNC)';
+
+It is will update log archive dest location in DGMGRL configuration
+
++++++++++++++++++++
+
+
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:11:35 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", (ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM V$ARCHIVED_LOG WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,(SELECT THREAD# ,SEQUENCE# FROM V$LOG_HISTORY WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD# = APPL.THREAD# ORDER BY 1;
+
+    Thread Last Sequence Received Last Sequence Applied Difference
+---------- ---------------------- --------------------- ----------
+         1                  61926                 61926          0
+         2                  60843                 60843          0
+
+SQL>
+SQL>
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1579 tmp]$ ps -ef|grep -i pmon
+grid       28520       1  0 Jun11 ?        00:00:13 asm_pmon_+ASM1
+grid       33058       1  0 Jun11 ?        00:00:13 mdb_pmon_-MGMTDB
+oracle     75177       1  0 Jun11 ?        00:00:25 ora_pmon_REPODB1
+oracle    834911       1  0 Jun13 ?        00:00:02 ora_pmon_ESAKDB1
+oracle   1394713 1024853  0 04:18 pts/10   00:00:00 grep --color=auto -i pmon
+[oracle@e75lrl1579 tmp]$ . oraenv
+ORACLE_SID = [ESAKDB1] ?
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1579 tmp]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:19:12 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> col HOST_NAME for a30
+SELECT
+    i.instance_name,
+    i.host_name,
+SQL>   2    3    4      d.name,
+  5      d.log_mode,
+    d.controlfile_type,
+    d.open_mode,
+  6    7    8      d.database_role,
+    d.switchover_status
+FROM
+  9   10   11      gv$database d
+JOIN
+    gv$instance i ON d.inst_id = i.inst_id; 12   13
+
+INSTANCE_NAME    HOST_NAME                      NAME      LOG_MODE     CONTROL
+---------------- ------------------------------ --------- ------------ -------
+OPEN_MODE            DATABASE_ROLE    SWITCHOVER_STATUS
+-------------------- ---------------- --------------------
+ESAKDB1          e75lrl1579.lfnet.se            INSISDB   ARCHIVELOG   CURRENT
+READ WRITE           PRIMARY          TO STANDBY
+
+ESAKDB2          e75lrl1580.lfnet.se            INSISDB   ARCHIVELOG   CURRENT
+READ WRITE           PRIMARY          TO STANDBY
+
+
+SQL> set line 400
+SQL> /
+
+INSTANCE_NAME    HOST_NAME                      NAME      LOG_MODE     CONTROL OPEN_MODE            DATABASE_ROLE    SWITCHOVER_STATUS
+---------------- ------------------------------ --------- ------------ ------- -------------------- ---------------- --------------------
+ESAKDB1          e75lrl1579.lfnet.se            INSISDB   ARCHIVELOG   CURRENT READ WRITE           PRIMARY          TO STANDBY
+ESAKDB2          e75lrl1580.lfnet.se            INSISDB   ARCHIVELOG   CURRENT READ WRITE           PRIMARY          TO STANDBY
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1579 tmp]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 04:19:54 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "ESAKDB"
+Connected as SYSDG.
+DGMGRL> show configuartion
+show configuartion
+     ^
+Syntax error before or at "configuartion"
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  ESAKDB  - Primary database
+    INSISDR - Physical standby database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 13 seconds ago)
+
+DGMGRL> exit
+[oracle@e75lrl1579 tmp]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:20:51 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> col HOST_NAME for a30
+SELECT
+    i.instance_name,
+    i.host_name,
+    d.name,
+SQL>   2    3    4    5      d.log_mode,
+    d.controlfile_type,
+    d.open_mode,
+  6    7    8      d.database_role,
+    d.switchover_status
+FROM
+  9   10   11      gv$database d
+JOIN
+    gv$instance i ON d.inst_id = i.inst_id; 12   13
+
+INSTANCE_NAME    HOST_NAME                      NAME      LOG_MODE     CONTROL
+---------------- ------------------------------ --------- ------------ -------
+OPEN_MODE            DATABASE_ROLE    SWITCHOVER_STATUS
+-------------------- ---------------- --------------------
+ESAKDB1          e75lrl1579.lfnet.se            INSISDB   ARCHIVELOG   CURRENT
+READ WRITE           PRIMARY          TO STANDBY
+
+ESAKDB2          e75lrl1580.lfnet.se            INSISDB   ARCHIVELOG   CURRENT
+READ WRITE           PRIMARY          TO STANDBY
+
+
+SQL> set line 400
+SQL> /
+
+INSTANCE_NAME    HOST_NAME                      NAME      LOG_MODE     CONTROL OPEN_MODE            DATABASE_ROLE    SWITCHOVER_STATUS
+---------------- ------------------------------ --------- ------------ ------- -------------------- ---------------- --------------------
+ESAKDB1          e75lrl1579.lfnet.se            INSISDB   ARCHIVELOG   CURRENT READ WRITE           PRIMARY          TO STANDBY
+ESAKDB2          e75lrl1580.lfnet.se            INSISDB   ARCHIVELOG   CURRENT READ WRITE           PRIMARY          TO STANDBY
+
+SQL> !date;hostname
+Sun Jun 14 04:21:18 CEST 2026
+e75lrl1579.lfnet.se
+
+SQL> alter system switch logfile;
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$ ps -ef|grep -i gg
+root        7515       1  0 Jun11 ?        00:00:00 /usr/sbin/sssd -i --logger=files
+root        7577    7515  0 Jun11 ?        00:00:07 /usr/libexec/sssd/sssd_be --domain lfnet.se --uid 0 --gid 0 --logger=files
+root        7645    7515  0 Jun11 ?        00:00:03 /usr/libexec/sssd/sssd_nss --uid 0 --gid 0 --logger=files
+root        7646    7515  0 Jun11 ?        00:00:03 /usr/libexec/sssd/sssd_pam --uid 0 --gid 0 --logger=files
+root        7647    7515  0 Jun11 ?        00:00:06 /usr/libexec/sssd/sssd_ssh --uid 0 --gid 0 --logger=files
+root        7649    7515  0 Jun11 ?        00:00:00 /usr/libexec/sssd/sssd_sudo --uid 0 --gid 0 --logger=files
+root        7651    7515  0 Jun11 ?        00:00:01 /usr/libexec/sssd/sssd_pac --uid 0 --gid 0 --logger=files
+grid       15721   14741  0 Jun11 ?        00:04:43 /g01/app/grid/oracle19c/bin/evmlogger.bin -o /g01/app/grid/oracle19c/log/[HOSTNAME]/evmd/evmlogger.info -l /g01/app/grid/oracle19c/log/[HOSTNAME]/evmd/evmlogger.log
+root       28727       1  0 Jun11 ?        00:19:59 /g01/app/grid/oracle19c/bin/ologgerd -M
+grid       30201       1  0 Jun11 ?        00:01:54 /g01/app/grid/oracle19c/jdk/bin/java -server -Xms128M -Xmx512M -Djava.awt.headless=true -Ddisable.checkForUpdate=true -Djava.security.properties=/g01/app/grid_base/crsdata/e75lrl1579/qos/conf/qos.security -Djdk.tls.client.protocols="TLSv1.2,TLSv1.3" -Dhttps.protocols="TLSv1.2,TLSv1.3" -Djava.util.logging.config.file=/g01/app/grid_base/crsdata/e75lrl1579/qos/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -DTRACING.ENABLED=false -Djava.rmi.server.hostname=e75lrl1579 -Doracle.http.port=8888 -Doracle.jmx.port=8895 -Doracle.tls.enabled=false -Doracle.jwc.tls.http.enabled=false -Djava.security.manager -Djava.security.policy=/g01/app/grid_base/crsdata/e75lrl1579/qos/conf/catalina.policy -Djava.security.egd=file:/dev/urandom -XX:ParallelGCThreads=2 -Dcatalina.home=/g01/app/grid/oracle19c/tomcat -Dcatalina.base=/g01/app/grid_base/crsdata/e75lrl1579/qos -Djava.io.tmpdir=/g01/app/grid_base/crsdata/e75lrl1579/qos/temp -Doracle.home=/g01/app/grid/oracle19c -Doracle.jwc.mode=CLUSTERWARE -classpath /g01/app/grid/oracle19c/jlib/cryptoj.jar:/g01/app/grid/oracle19c/jlib/oraclepki.jar:/g01/app/grid/oracle19c/jlib/osdt_core.jar:/g01/app/grid/oracle19c/jlib/osdt_cert.jar:/g01/app/grid/oracle19c/tomcat/lib/tomcat-juli.jar:/g01/app/grid/oracle19c/tomcat/lib/bootstrap.jar:/g01/app/grid/oracle19c/jlib/jwc-logging.jar org.apache.catalina.startup.Bootstrap start
+grid      102112       1  0 Jun12 ?        00:00:28 ./mgr PARAMFILE /gghome/app/product/ogg19c/dirprm/mgr.prm REPORTFILE /gghome/app/product/ogg19c/dirrpt/MGR.rpt PROCESSID MGR
+oracle   1407240 1024853  0 04:26 pts/10   00:00:00 grep --color=auto -i gg
+[oracle@e75lrl1579 tmp]$ sudo su - grid
+Last login: Sun Jun 14 03:15:26 CEST 2026
+[grid@e75lrl1579 ~]$
+[grid@e75lrl1579 ~]$
+[grid@e75lrl1579 ~]$ . oraenv
+ORACLE_SID = [grid] ? +ASM1
+The Oracle base has been set to /g01/app/grid_base
+[grid@e75lrl1579 ~]$
+[grid@e75lrl1579 ~]$
+[grid@e75lrl1579 ~]$ cd /gghome/app/product/ogg19c/
+[grid@e75lrl1579 ogg19c]$ ./ggsci
+
+Oracle GoldenGate Command Interpreter for Oracle
+Version 19.24.0.0.240716 OGGCORE_19.24.0.0.0OGGRU_PLATFORMS_240706.1245_FBO
+Linux, x64, 64bit (optimized), Oracle 19c  on Jul  6 2024 16:30:34
+Operating system character set identified as UTF-8.
+
+Copyright (C) 1995, 2024, Oracle and/or its affiliates. All rights reserved.
+
+
+
+GGSCI (e75lrl1579.lfnet.se) 1> info all
+
+Program     Status      Group       Lag at Chkpt  Time Since Chkpt
+
+MANAGER     RUNNING
+EXTRACT     STOPPED     INEDW       00:00:02      06:07:48
+REPLICAT    STOPPED     INRDW       00:00:00      06:07:48
+
+
+GGSCI (e75lrl1579.lfnet.se) 2>
+
+GGSCI (e75lrl1579.lfnet.se) 2>
+
+GGSCI (e75lrl1579.lfnet.se) 2> exit
+[grid@e75lrl1579 ogg19c]$ exit
+logout
+[oracle@e75lrl1579 tmp]$ . oraenv
+ORACLE_SID = [ESAKDB1] ?
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:27:54 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> ALTER SYSTEM SET job_queue_processes = 640 SCOPE=BOTH;
+
+System altered.
+
+SQL> show parameter job_queue_processes
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+job_queue_processes                  integer
+640
+SQL> SELECT 'EXECUTE DBMS_SCHEDULER.DISABLE(''' || owner || '.' || job_name || ''');'
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';  2    3
+
+no rows selected
+
+SQL> COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';SQL> SQL> SQL> SQL>   2    3
+
+no rows selected
+
+SQL> EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_PURGE_SESSIONS');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_MAIL_QUEUE');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_PWA_PUSH_QUEUE');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_WS_NOTIFICATIONS');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_DAILY_MAINTENANCE');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_REST_SOURCE_SYNC');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_AUTOMATIONS');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_BG_PROCESSES');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_TASKS_PURGE');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_WF_TIMEOUT');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_TASKS_EXPIRE');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_WFS_PURGE');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_AUTO_APPROVAL');
+EXECUTE DBMS_SCHEDULER.ENABLE('APEX_240200.ORACLE_APEX_DAILY_METRICS');
+EXECUTE DBMS_SCHEDULER.ENABLE('ETTSAK_CAPT_NORMALIZED.MV_RF$J_0_S_4475186');
+EXECUTE DBMS_SCHEDULER.ENABLE('ETTSAK_CAPT_NORMALIZED.MV_RF$J_0_S_4475174');
+EXECUTE DBMS_SCHEDULER.ENABLE('ETTSAK_CAPT_NORMALIZED.MV_RF$J_0_S_4475202');
+EXECUTE DBMS_SCHEDULER.ENABLE('ETTSAK_CAPT_NORMALIZED.MV_RF$J_0_S_4475210');
+EXECUTE DBMS_SCHEDULER.ENABLE('INSIS_DB_AUDIT.CLEANUP_AUDIT_TABLE');
+EXECUTE DBMS_SCHEDULER.ENABLE('INSIS_DB_AUDIT.AUDIT_DATA_MAINTENANCE_JOB');
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+PL/SQL procedure successfully completed.
+
+SQL>
+
+PL/SQL procedure successfully completed.
+
+SQL>
+SQL>
+SQL>
+SQL>
+SQL>
+SQL> COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';SQL> SQL> SQL> SQL>   2    3
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+APEX_240200          ORACLE_APEX_PURGE_SESSIONS
+17-APR-25 06.30.30.315021 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_MAIL_QUEUE
+17-APR-25 06.30.30.541242 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_PWA_PUSH_QUEUE
+17-APR-25 06.30.30.555195 AM +02:00                                     TRUE
+
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+APEX_240200          ORACLE_APEX_WS_NOTIFICATIONS
+17-APR-25 06.30.30.560296 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_DAILY_MAINTENANCE
+17-APR-25 06.30.30.672849 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_REST_SOURCE_SYNC
+17-APR-25 06.30.30.683647 AM +02:00                                     TRUE
+
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+APEX_240200          ORACLE_APEX_AUTOMATIONS
+17-APR-25 06.30.30.696189 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_BG_PROCESSES
+17-APR-25 06.30.30.704044 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_TASKS_PURGE
+17-APR-25 06.30.30.713370 AM +02:00                                     TRUE
+
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+APEX_240200          ORACLE_APEX_WF_TIMEOUT
+17-APR-25 06.30.30.953459 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_TASKS_EXPIRE
+17-APR-25 06.30.30.938863 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_WFS_PURGE
+17-APR-25 06.30.31.175118 AM +02:00                                     TRUE
+
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+APEX_240200          ORACLE_APEX_AUTO_APPROVAL
+17-APR-25 06.30.31.182555 AM +02:00                                     TRUE
+
+APEX_240200          ORACLE_APEX_DAILY_METRICS
+17-APR-25 06.30.31.293201 AM +02:00                                     TRUE
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475186
+ED
+10-JUN-26 03.15.01.000000 PM EUROPE/STOCKHOLM                           TRUE
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475174
+ED
+10-JUN-26 03.14.59.000000 PM EUROPE/STOCKHOLM                           TRUE
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475202
+ED
+10-JUN-26 03.15.33.000000 PM EUROPE/STOCKHOLM                           TRUE
+
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475210
+ED
+10-JUN-26 03.16.12.000000 PM EUROPE/STOCKHOLM                           TRUE
+
+INSIS_DB_AUDIT       CLEANUP_AUDIT_TABLE
+06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+
+INSIS_DB_AUDIT       AUDIT_DATA_MAINTENANCE_JOB
+06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+
+OWNER                JOB_NAME
+-------------------- ------------------------------
+START_DATE                                         END_DATE             ENABL
+-------------------------------------------------- -------------------- -----
+
+
+20 rows selected.
+
+SQL> set line 400
+SQL> /
+
+OWNER                JOB_NAME                       START_DATE                                         END_DATE             ENABL
+-------------------- ------------------------------ -------------------------------------------------- -------------------- -----
+INSIS_SCHEDULER      test_timeoutjob                28-NOV-20 10.13.00.000000 AM EUROPE/STOCKHOLM                           TRUE
+INSIS_SCHEDULER      test_approletimeout            28-NOV-20 10.12.00.000000 AM EUROPE/STOCKHOLM                           TRUE
+APEX_240200          ORACLE_APEX_PURGE_SESSIONS     17-APR-25 06.30.30.315021 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_MAIL_QUEUE         17-APR-25 06.30.30.541242 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_PWA_PUSH_QUEUE     17-APR-25 06.30.30.555195 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_WS_NOTIFICATIONS   17-APR-25 06.30.30.560296 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_DAILY_MAINTENANCE  17-APR-25 06.30.30.672849 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_REST_SOURCE_SYNC   17-APR-25 06.30.30.683647 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_AUTOMATIONS        17-APR-25 06.30.30.696189 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_BG_PROCESSES       17-APR-25 06.30.30.704044 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_TASKS_PURGE        17-APR-25 06.30.30.713370 AM +02:00                                     TRUE
+
+OWNER                JOB_NAME                       START_DATE                                         END_DATE             ENABL
+-------------------- ------------------------------ -------------------------------------------------- -------------------- -----
+APEX_240200          APEX$AUTOMATION_19071082437173                                                                         TRUE
+                     6609
+
+APEX_240200          ORACLE_APEX_WF_TIMEOUT         17-APR-25 06.30.30.953459 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_TASKS_EXPIRE       17-APR-25 06.30.30.938863 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_WFS_PURGE          17-APR-25 06.30.31.175118 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_AUTO_APPROVAL      17-APR-25 06.30.31.182555 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_DAILY_METRICS      17-APR-25 06.30.31.293201 AM +02:00                                     TRUE
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475186            10-JUN-26 03.15.01.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+
+OWNER                JOB_NAME                       START_DATE                                         END_DATE             ENABL
+-------------------- ------------------------------ -------------------------------------------------- -------------------- -----
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475174            10-JUN-26 03.14.59.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475202            10-JUN-26 03.15.33.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475210            10-JUN-26 03.16.12.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+INSIS_DB_AUDIT       CLEANUP_AUDIT_TABLE            06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+INSIS_DB_AUDIT       AUDIT_DATA_MAINTENANCE_JOB     06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+
+23 rows selected.
+
+SQL> set pagesize 9999
+SQL> /
+
+OWNER                JOB_NAME                       START_DATE                                         END_DATE             ENABL
+-------------------- ------------------------------ -------------------------------------------------- -------------------- -----
+INSIS_SCHEDULER      test_timeoutjob                28-NOV-20 10.13.00.000000 AM EUROPE/STOCKHOLM                           TRUE
+INSIS_SCHEDULER      test_approletimeout            28-NOV-20 10.12.00.000000 AM EUROPE/STOCKHOLM                           TRUE
+APEX_240200          ORACLE_APEX_PURGE_SESSIONS     17-APR-25 06.30.30.315021 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_MAIL_QUEUE         17-APR-25 06.30.30.541242 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_PWA_PUSH_QUEUE     17-APR-25 06.30.30.555195 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_WS_NOTIFICATIONS   17-APR-25 06.30.30.560296 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_DAILY_MAINTENANCE  17-APR-25 06.30.30.672849 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_REST_SOURCE_SYNC   17-APR-25 06.30.30.683647 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_AUTOMATIONS        17-APR-25 06.30.30.696189 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_BG_PROCESSES       17-APR-25 06.30.30.704044 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_TASKS_PURGE        17-APR-25 06.30.30.713370 AM +02:00                                     TRUE
+APEX_240200          APEX$AUTOMATION_19071082437173                                                                         TRUE
+                     6609
+
+APEX_240200          ORACLE_APEX_WF_TIMEOUT         17-APR-25 06.30.30.953459 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_TASKS_EXPIRE       17-APR-25 06.30.30.938863 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_WFS_PURGE          17-APR-25 06.30.31.175118 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_AUTO_APPROVAL      17-APR-25 06.30.31.182555 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_DAILY_METRICS      17-APR-25 06.30.31.293201 AM +02:00                                     TRUE
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475186            10-JUN-26 03.15.01.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475174            10-JUN-26 03.14.59.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475202            10-JUN-26 03.15.33.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475210            10-JUN-26 03.16.12.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+INSIS_DB_AUDIT       CLEANUP_AUDIT_TABLE            06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+INSIS_DB_AUDIT       AUDIT_DATA_MAINTENANCE_JOB     06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+
+23 rows selected.
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1579 tmp]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 04:37:10 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "ESAKDB"
+Connected as SYSDG.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  ESAKDB  - Primary database
+    INSISDR - Physical standby database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 12 seconds ago)
+
+DGMGRL> edit instance 'INSISDR1' on database 'INSISDR' set property LogArchiveTrace = 0;
+ORA-01017: invalid username/password; logon denied
+
+DGMGRL> edit instance 'ESAKDB1' on database 'ESAKDB' set property LogArchiveTrace = 0;
+Property "logarchivetrace" updated
+DGMGRL> show configuration TraceLevel;
+  TraceLevel = 'SUPPORT'
+DGMGRL> edit configuration set property tracelevel=USER;
+Property "tracelevel" updated
+DGMGRL> show configuration TraceLevel;
+  TraceLevel = 'USER'
+DGMGRL> exit
+[oracle@e75lrl1579 tmp]$ sudo su - grid
+Last login: Sun Jun 14 04:37:42 CEST 2026 on pts/8
+[grid@e75lrl1579 ~]$ . oraenv
+ORACLE_SID = [grid] ? +ASM1
+The Oracle base has been set to /g01/app/grid_base
+[grid@e75lrl1579 ~]$
+[grid@e75lrl1579 ~]$
+[grid@e75lrl1579 ~]$ ps -ef|grep -i gg
+root        7515       1  0 Jun11 ?        00:00:00 /usr/sbin/sssd -i --logger=files
+root        7577    7515  0 Jun11 ?        00:00:07 /usr/libexec/sssd/sssd_be --domain lfnet.se --uid 0 --gid 0 --logger=files
+root        7645    7515  0 Jun11 ?        00:00:03 /usr/libexec/sssd/sssd_nss --uid 0 --gid 0 --logger=files
+root        7646    7515  0 Jun11 ?        00:00:03 /usr/libexec/sssd/sssd_pam --uid 0 --gid 0 --logger=files
+root        7647    7515  0 Jun11 ?        00:00:06 /usr/libexec/sssd/sssd_ssh --uid 0 --gid 0 --logger=files
+root        7649    7515  0 Jun11 ?        00:00:00 /usr/libexec/sssd/sssd_sudo --uid 0 --gid 0 --logger=files
+root        7651    7515  0 Jun11 ?        00:00:01 /usr/libexec/sssd/sssd_pac --uid 0 --gid 0 --logger=files
+grid       15721   14741  0 Jun11 ?        00:04:44 /g01/app/grid/oracle19c/bin/evmlogger.bin -o /g01/app/grid/oracle19c/log/[HOSTNAME]/evmd/evmlogger.info -l /g01/app/grid/oracle19c/log/[HOSTNAME]/evmd/evmlogger.log
+root       28727       1  0 Jun11 ?        00:20:05 /g01/app/grid/oracle19c/bin/ologgerd -M
+grid       30201       1  0 Jun11 ?        00:01:54 /g01/app/grid/oracle19c/jdk/bin/java -server -Xms128M -Xmx512M -Djava.awt.headless=true -Ddisable.checkForUpdate=true -Djava.security.properties=/g01/app/grid_base/crsdata/e75lrl1579/qos/conf/qos.security -Djdk.tls.client.protocols="TLSv1.2,TLSv1.3" -Dhttps.protocols="TLSv1.2,TLSv1.3" -Djava.util.logging.config.file=/g01/app/grid_base/crsdata/e75lrl1579/qos/conf/logging.properties -Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager -DTRACING.ENABLED=false -Djava.rmi.server.hostname=e75lrl1579 -Doracle.http.port=8888 -Doracle.jmx.port=8895 -Doracle.tls.enabled=false -Doracle.jwc.tls.http.enabled=false -Djava.security.manager -Djava.security.policy=/g01/app/grid_base/crsdata/e75lrl1579/qos/conf/catalina.policy -Djava.security.egd=file:/dev/urandom -XX:ParallelGCThreads=2 -Dcatalina.home=/g01/app/grid/oracle19c/tomcat -Dcatalina.base=/g01/app/grid_base/crsdata/e75lrl1579/qos -Djava.io.tmpdir=/g01/app/grid_base/crsdata/e75lrl1579/qos/temp -Doracle.home=/g01/app/grid/oracle19c -Doracle.jwc.mode=CLUSTERWARE -classpath /g01/app/grid/oracle19c/jlib/cryptoj.jar:/g01/app/grid/oracle19c/jlib/oraclepki.jar:/g01/app/grid/oracle19c/jlib/osdt_core.jar:/g01/app/grid/oracle19c/jlib/osdt_cert.jar:/g01/app/grid/oracle19c/tomcat/lib/tomcat-juli.jar:/g01/app/grid/oracle19c/tomcat/lib/bootstrap.jar:/g01/app/grid/oracle19c/jlib/jwc-logging.jar org.apache.catalina.startup.Bootstrap start
+grid      102112       1  0 Jun12 ?        00:00:28 ./mgr PARAMFILE /gghome/app/product/ogg19c/dirprm/mgr.prm REPORTFILE /gghome/app/product/ogg19c/dirrpt/MGR.rpt PROCESSID MGR
+grid     1425738 1425406  0 04:37 pts/8    00:00:00 ./ggsci
+grid     1426022  102112  2 04:38 ?        00:00:07 /gghome/app/product/ogg19c/extract PARAMFILE /gghome/app/product/ogg19c/dirprm/INEDW.prm REPORTFILE /gghome/app/product/ogg19c/dirrpt/INEDW.rpt PROCESSID INEDW
+grid     1426023  102112  0 04:38 ?        00:00:01 /gghome/app/product/ogg19c/replicat PARAMFILE /gghome/app/product/ogg19c/dirprm/INRDW.prm REPORTFILE /gghome/app/product/ogg19c/dirrpt/INRDW.rpt PROCESSID INRDW
+grid     1433357 1432563  0 04:42 pts/9    00:00:00 grep --color=auto -i gg
+[grid@e75lrl1579 ~]$ cd /gghome/app/product/ogg19c/
+[grid@e75lrl1579 ogg19c]$ ./ggsci
+
+Oracle GoldenGate Command Interpreter for Oracle
+Version 19.24.0.0.240716 OGGCORE_19.24.0.0.0OGGRU_PLATFORMS_240706.1245_FBO
+Linux, x64, 64bit (optimized), Oracle 19c  on Jul  6 2024 16:30:34
+Operating system character set identified as UTF-8.
+
+Copyright (C) 1995, 2024, Oracle and/or its affiliates. All rights reserved.
+
+
+
+GGSCI (e75lrl1579.lfnet.se) 1> info all
+
+Program     Status      Group       Lag at Chkpt  Time Since Chkpt
+
+MANAGER     RUNNING
+EXTRACT     RUNNING     INEDW       00:00:03      00:00:05
+REPLICAT    RUNNING     INRDW       00:00:00      00:00:03
+
+
+GGSCI (e75lrl1579.lfnet.se) 2> exit
+[grid@e75lrl1579 ogg19c]$ who
+c81d2r   pts/0        2026-06-13 19:57 (10.200.133.53)
+oracle   pts/1        2026-06-14 01:02 (10.200.133.51)
+c81u51   pts/2        2026-06-13 19:48 (10.200.133.51)
+c81u51   pts/3        2026-06-13 19:48 (10.200.133.51)
+c81u51   pts/4        2026-06-13 19:49 (10.200.133.51)
+c81u51   pts/5        2026-06-13 19:49 (10.200.133.51)
+c81d2r   pts/6        2026-06-13 19:57 (10.200.133.53)
+oracle   pts/7        2026-06-14 03:30 (10.221.25.49)
+oracle   pts/8        2026-06-14 04:37 (10.221.25.49)
+oracle   pts/9        2026-06-14 04:41 (10.200.133.51)
+root     pts/10       2026-06-14 01:02 (10.200.133.51)
+[grid@e75lrl1579 ogg19c]$ exit
+logout
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$ ps -ef|grep -i pmon
+grid       28520       1  0 Jun11 ?        00:00:13 asm_pmon_+ASM1
+grid       33058       1  0 Jun11 ?        00:00:13 mdb_pmon_-MGMTDB
+oracle     75177       1  0 Jun11 ?        00:00:25 ora_pmon_REPODB1
+oracle    834911       1  0 Jun13 ?        00:00:03 ora_pmon_ESAKDB1
+oracle   1436542 1024853  0 04:44 pts/10   00:00:00 grep --color=auto -i pmon
+[oracle@e75lrl1579 tmp]$ . oraenv
+ORACLE_SID = [ESAKDB1] ? ESAKDB1
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$
+[oracle@e75lrl1579 tmp]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:45:03 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+
+
++++++++++++++++++
+
+
+------------------------------
+
+log_archive_dest_19                  string
+
+log_archive_dest_2                   string
+service="esaklg", ASYNC NOAFFI
+RM delay=0 optional compressio
+n=disable max_failure=0 reopen
+=300 db_unique_name="ESAKLG" n
+et_timeout=30, valid_for=(onli
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+ne_logfile,all_roles)
+log_archive_dest_20                  string
+
+log_archive_dest_21                  string
+
+log_archive_dest_22                  string
+
+log_archive_dest_23                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_24                  string
+
+log_archive_dest_25                  string
+
+log_archive_dest_26                  string
+
+log_archive_dest_27                  string
+
+log_archive_dest_28                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_29                  string
+
+log_archive_dest_3                   string
+
+log_archive_dest_30                  string
+
+log_archive_dest_31                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_4                   string
+
+log_archive_dest_5                   string
+
+log_archive_dest_6                   string
+
+log_archive_dest_7                   string
+
+log_archive_dest_8                   string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_9                   string
+
+log_archive_dest_state_1             string
+enable
+log_archive_dest_state_10            string
+enable
+log_archive_dest_state_11            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_12            string
+enable
+log_archive_dest_state_13            string
+enable
+log_archive_dest_state_14            string
+enable
+log_archive_dest_state_15            string
+enable
+log_archive_dest_state_16            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_17            string
+enable
+log_archive_dest_state_18            string
+enable
+log_archive_dest_state_19            string
+enable
+log_archive_dest_state_2             string
+ENABLE
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_20            string
+enable
+log_archive_dest_state_21            string
+enable
+log_archive_dest_state_22            string
+enable
+log_archive_dest_state_23            string
+enable
+log_archive_dest_state_24            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_25            string
+enable
+log_archive_dest_state_26            string
+enable
+log_archive_dest_state_27            string
+enable
+log_archive_dest_state_28            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_29            string
+enable
+log_archive_dest_state_3             string
+ENABLE
+log_archive_dest_state_30            string
+enable
+log_archive_dest_state_31            string
+enable
+log_archive_dest_state_4             string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_5             string
+enable
+log_archive_dest_state_6             string
+enable
+log_archive_dest_state_7             string
+enable
+log_archive_dest_state_8             string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_9             string
+enable
+log_archive_duplex_dest              string
+
+log_archive_format                   string
+ARC%S_%R.%T
+log_archive_max_processes            integer
+4
+log_archive_min_succeed_dest         integer
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+1
+log_archive_start                    boolean
+FALSE
+log_archive_trace                    integer
+8191
+SQL> show parameter log_archive_dest_2
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_2                   string
+service="esaklg", ASYNC NOAFFI
+RM delay=0 optional compressio
+n=disable max_failure=0 reopen
+=300 db_unique_name="ESAKLG" n
+et_timeout=30, valid_for=(onli
+ne_logfile,all_roles)
+log_archive_dest_20                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_21                  string
+
+log_archive_dest_22                  string
+
+log_archive_dest_23                  string
+
+log_archive_dest_24                  string
+
+log_archive_dest_25                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_26                  string
+
+log_archive_dest_27                  string
+
+log_archive_dest_28                  string
+
+log_archive_dest_29                  string
+
+SQL> ALTER SYSTEM SET log_archive_dest_2='service="eskadb", ASYNC NOAFFIRM delay=0 optional compression=disable max_failure=0 reopen=300 db_unique_name="ESKADB" net_timeout=30, valid_for=(online_logfile,all_roles)' SCOPE=BOTH;
+ALTER SYSTEM SET log_archive_dest_2='service="eskadb", ASYNC NOAFFIRM delay=0 optional compression=disable max_failure=0 reopen=300 db_unique_name="ESKADB" net_timeout=30, valid_for=(online_logfile,all_roles)' SCOPE=BOTH
+*
+ERROR at line 1:
+ORA-02097: parameter cannot be modified because specified value is invalid
+ORA-16026: parameter LOG_ARCHIVE_DEST_2 contains an invalid attribute value
+
+
+SQL> show parameter db_name;
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+db_name                              string
+INSISDB
+SQL> show parameter log_archive_dest_2
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_2                   string
+SERVICE=esakdb ASYNC NOAFFIRM
+DELAY=0 OPTIONAL COMPRESSION=D
+ISABLE MAX_FAILURE=0 REOPEN=30
+0 DB_UNIQUE_NAME=esakdb NET_TI
+MEOUT=30 VALID_FOR=(ONLINE_LOG
+FILES,ALL_ROLES)
+log_archive_dest_20                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_21                  string
+
+log_archive_dest_22                  string
+
+log_archive_dest_23                  string
+
+log_archive_dest_24                  string
+
+log_archive_dest_25                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_26                  string
+
+log_archive_dest_27                  string
+
+log_archive_dest_28                  string
+
+log_archive_dest_29                  string
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ . oraenv
+ORACLE_SID = [INSISDR1] ?
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sat Jun 13 23:57:12 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    Error: ORA-16810: multiple errors or warnings detected for the member
+
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+    Error: ORA-16810: multiple errors or warnings detected for the member
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 53 seconds ago)
+
+DGMGRL> disable configuration
+Disabled.
+DGMGRL> enable configuration
+Enabled.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    Error: ORA-16810: multiple errors or warnings detected for the member
+
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 64 seconds ago)
+
+DGMGRL> show database esakdb
+
+Database - ESAKDB
+
+  Role:               PHYSICAL STANDBY
+  Intended State:     APPLY-ON
+  Transport Lag:      5 minutes 6 seconds (computed 99 seconds ago)
+  Apply Lag:          5 minutes 6 seconds (computed 100 seconds ago)
+  Average Apply Rate: 369.00 KByte/s
+  Real Time Query:    ON
+  Instance(s):
+    ESAKDB1 (apply instance)
+    ESAKDB2
+
+  Database Error(s):
+    ORA-16685: database does not receive redo data
+
+  Database Warning(s):
+    ORA-16853: apply lag has exceeded specified threshold
+    ORA-16855: transport lag has exceeded specified threshold
+    ORA-16857: member disconnected from redo source for longer than specified threshold
+
+Database Status:
+ERROR
+
+DGMGRL> show database insisdr
+
+Database - INSISDR
+
+  Role:               PRIMARY
+  Intended State:     TRANSPORT-ON
+  Instance(s):
+    INSISDR1
+    INSISDR2
+
+Database Status:
+SUCCESS
+
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+    Error: ORA-16810: multiple errors or warnings detected for the member
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 38 seconds ago)
+
+DGMGRL> VALIDATE DATABASE 'ESAKDB';
+
+  Database Role:     Physical standby database
+  Primary Database:  INSISDR
+
+  Ready for Switchover:  No
+  Ready for Failover:    Yes (Primary Running)
+
+  Managed by Clusterware:
+    INSISDR:  YES
+    ESAKDB :  YES
+
+  Temporary Tablespace File Information:
+    INSISDR TEMP Files:  16
+    ESAKDB TEMP Files:   14
+
+  Standby Apply-Related Information:
+    Apply State:      Running
+    Apply Lag:        5 minutes 6 seconds (computed 363 seconds ago)
+    Apply Delay:      0 minutes
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ tnsping esakdb
+
+TNS Ping Utility for Linux: Version 19.0.0.0.0 - Production on 14-JUN-2026 00:05:27
+
+Copyright (c) 1997, 2024, Oracle.  All rights reserved.
+
+Used parameter files:
+/u01/app/oracle/rdbms19c/network/admin/sqlnet.ora
+
+
+Used TNSNAMES adapter to resolve the alias
+Attempting to contact (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = insis-db-scan.lfnet.se)(PORT = 1521)) (CONNECT_DATA = (SERVICE_NAME = ESAKDB)))
+OK (10 msec)
+[oracle@e75lrl1054 ~]$ tnsping insisdr
+
+TNS Ping Utility for Linux: Version 19.0.0.0.0 - Production on 14-JUN-2026 00:05:48
+
+Copyright (c) 1997, 2024, Oracle.  All rights reserved.
+
+Used parameter files:
+/u01/app/oracle/rdbms19c/network/admin/sqlnet.ora
+
+
+Used TNSNAMES adapter to resolve the alias
+Attempting to contact (DESCRIPTION = (ADDRESS = (PROTOCOL = TCP)(HOST = insis-DR-scan.lfnet.se)(PORT = 1521)) (CONNECT_DATA = (SERVICE_NAME = INSISDR)))
+OK (0 msec)
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:06:03 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> DISABLE CONFIGURATION;
+Disabled.
+DGMGRL> ENABLE CONFIGURATION;
+Enabled.
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:07:15 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> show parameter log_archive_dest
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest                     string
+
+log_archive_dest_1                   string
+LOCATION=USE_DB_RECOVERY_FILE_
+DEST valid_for=(all_logfiles,a
+ll_roles) db_unique_name=INSIS
+DR
+log_archive_dest_10                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_11                  string
+
+log_archive_dest_12                  string
+
+log_archive_dest_13                  string
+
+log_archive_dest_14                  string
+
+log_archive_dest_15                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_16                  string
+
+log_archive_dest_17                  string
+
+log_archive_dest_18                  string
+
+log_archive_dest_19                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_2                   string
+service="esaklg", ASYNC NOAFFI
+RM delay=0 optional compressio
+n=disable max_failure=0 reopen
+=300 db_unique_name="ESAKLG" n
+et_timeout=30, valid_for=(onli
+ne_logfile,all_roles)
+log_archive_dest_20                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_21                  string
+
+log_archive_dest_22                  string
+
+log_archive_dest_23                  string
+
+log_archive_dest_24                  string
+
+log_archive_dest_25                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_26                  string
+
+log_archive_dest_27                  string
+
+log_archive_dest_28                  string
+
+log_archive_dest_29                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_3                   string
+
+log_archive_dest_30                  string
+
+log_archive_dest_31                  string
+
+log_archive_dest_4                   string
+
+log_archive_dest_5                   string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_6                   string
+
+log_archive_dest_7                   string
+
+log_archive_dest_8                   string
+
+log_archive_dest_9                   string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_1             string
+enable
+log_archive_dest_state_10            string
+enable
+log_archive_dest_state_11            string
+enable
+log_archive_dest_state_12            string
+enable
+log_archive_dest_state_13            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_14            string
+enable
+log_archive_dest_state_15            string
+enable
+log_archive_dest_state_16            string
+enable
+log_archive_dest_state_17            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_18            string
+enable
+log_archive_dest_state_19            string
+enable
+log_archive_dest_state_2             string
+ENABLE
+log_archive_dest_state_20            string
+enable
+log_archive_dest_state_21            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_22            string
+enable
+log_archive_dest_state_23            string
+enable
+log_archive_dest_state_24            string
+enable
+log_archive_dest_state_25            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_26            string
+enable
+log_archive_dest_state_27            string
+enable
+log_archive_dest_state_28            string
+enable
+log_archive_dest_state_29            string
+enable
+log_archive_dest_state_3             string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+ENABLE
+log_archive_dest_state_30            string
+enable
+log_archive_dest_state_31            string
+enable
+log_archive_dest_state_4             string
+enable
+log_archive_dest_state_5             string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_6             string
+enable
+log_archive_dest_state_7             string
+enable
+log_archive_dest_state_8             string
+enable
+log_archive_dest_state_9             string
+enable
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:08:22 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL>
+DGMGRL>
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ ps -ef|grep -i pmon
+grid       27995       1  0 Jun11 ?        00:00:17 asm_pmon_+ASM1
+oracle     96377       1  0 Jun12 ?        00:00:30 ora_pmon_REPODR1
+oracle     99535       1  0 Jun12 ?        00:00:34 ora_pmon_INSISDR1
+oracle   3269934 2609450  0 00:08 pts/3    00:00:00 grep --color=auto -i pmon
+[oracle@e75lrl1054 ~]$ . oraenv
+ORACLE_SID = [INSISDR1] ? INSISDR1
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:08:56 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> DISABLE CONFIGURATION;
+Disabled.
+DGMGRL> ENABLE CONFIGURATION;
+
+Enabled.
+DGMGRL> DGMGRL>
+DGMGRL>
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+    Error: ORA-16685: database does not receive redo data
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 9 seconds ago)
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:11:49 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> show parameter log_archive_dest
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest                     string
+
+log_archive_dest_1                   string
+LOCATION=USE_DB_RECOVERY_FILE_
+DEST valid_for=(all_logfiles,a
+ll_roles) db_unique_name=INSIS
+DR
+log_archive_dest_10                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_11                  string
+
+log_archive_dest_12                  string
+
+log_archive_dest_13                  string
+
+log_archive_dest_14                  string
+
+log_archive_dest_15                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_16                  string
+
+log_archive_dest_17                  string
+
+log_archive_dest_18                  string
+
+log_archive_dest_19                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_2                   string
+service="esaklg", ASYNC NOAFFI
+RM delay=0 optional compressio
+n=disable max_failure=0 reopen
+=300 db_unique_name="ESAKLG" n
+et_timeout=30, valid_for=(onli
+ne_logfile,all_roles)
+log_archive_dest_20                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_21                  string
+
+log_archive_dest_22                  string
+
+log_archive_dest_23                  string
+
+log_archive_dest_24                  string
+
+log_archive_dest_25                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_26                  string
+
+log_archive_dest_27                  string
+
+log_archive_dest_28                  string
+
+log_archive_dest_29                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_3                   string
+
+log_archive_dest_30                  string
+
+log_archive_dest_31                  string
+
+log_archive_dest_4                   string
+
+log_archive_dest_5                   string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_6                   string
+
+log_archive_dest_7                   string
+
+log_archive_dest_8                   string
+
+log_archive_dest_9                   string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_1             string
+enable
+log_archive_dest_state_10            string
+enable
+log_archive_dest_state_11            string
+enable
+log_archive_dest_state_12            string
+enable
+log_archive_dest_state_13            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_14            string
+enable
+log_archive_dest_state_15            string
+enable
+log_archive_dest_state_16            string
+enable
+log_archive_dest_state_17            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_18            string
+enable
+log_archive_dest_state_19            string
+enable
+log_archive_dest_state_2             string
+ENABLE
+log_archive_dest_state_20            string
+enable
+log_archive_dest_state_21            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_22            string
+enable
+log_archive_dest_state_23            string
+enable
+log_archive_dest_state_24            string
+enable
+log_archive_dest_state_25            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_26            string
+enable
+log_archive_dest_state_27            string
+enable
+log_archive_dest_state_28            string
+enable
+log_archive_dest_state_29            string
+enable
+log_archive_dest_state_3             string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+ENABLE
+log_archive_dest_state_30            string
+enable
+log_archive_dest_state_31            string
+enable
+log_archive_dest_state_4             string
+enable
+log_archive_dest_state_5             string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_6             string
+enable
+log_archive_dest_state_7             string
+enable
+log_archive_dest_state_8             string
+enable
+log_archive_dest_state_9             string
+enable
+SQL> show parameter log_archive_dest_3
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_3                   string
+
+log_archive_dest_30                  string
+
+log_archive_dest_31                  string
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:15:37 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL>
+DGMGRL>
+DGMGRL> show property SET PROPERTY DGConnectIdentifier
+show property SET PROPERTY DGConnectIdentifier
+     ^
+Syntax error before or at "property"
+DGMGRL> show property DGConnectIdentifier
+show property DGConnectIdentifier
+     ^
+Syntax error before or at "property"
+DGMGRL> SHOW DATABASE 'ESAKDB' DGConnectIdentifier;
+  DGConnectIdentifier = 'ESAKDB'
+DGMGRL> SHOW DATABASE 'ESAKDB';
+
+Database - ESAKDB
+
+  Role:               PHYSICAL STANDBY
+  Intended State:     APPLY-ON
+  Transport Lag:      0 seconds (computed 0 seconds ago)
+  Apply Lag:          0 seconds (computed 0 seconds ago)
+  Average Apply Rate: 57.00 KByte/s
+  Real Time Query:    ON
+  Instance(s):
+    ESAKDB1 (apply instance)
+    ESAKDB2
+
+  Database Error(s):
+    ORA-16685: database does not receive redo data
+
+Database Status:
+ERROR
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:18:54 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> show parameter log_archive_dest_3
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_3                   string
+service="esakdb" ASYNC NOAFFIR
+M delay=0 optional compression
+=disable max_failure=0 reopen=
+300 db_unique_name="esakdb"
+net_timeout=30 valid_for=(onli
+ne_logfile,all_roles)
+log_archive_dest_30                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_31                  string
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:22:28 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> EDIT DATABASE 'ESAKDB' SET PROPERTY DGConnectIdentifier = 'esakdb';
+Property "dgconnectidentifier" updated
+DGMGRL> EDIT DATABASE 'ESAKDB' SET PROPERTY DBUniqueName = 'esakdb';
+Error: ORA-16587: ambiguous object specified to Data Guard broker
+
+Failed.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+    Error: ORA-16685: database does not receive redo data
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 29 seconds ago)
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:29:09 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> SELECT process, status, sequence#, block# FROM v$managed_standby WHERE process IN ('RFS', 'MRP0');
+
+no rows selected
+
+SQL> archive log list;
+Database log mode              Archive Mode
+Automatic archival             Enabled
+Archive destination            USE_DB_RECOVERY_FILE_DEST
+Oldest online log sequence     61900
+Next log sequence to archive   61905
+Current log sequence           61905
+SQL> alter system switch logfile;
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> archive log list;
+Database log mode              Archive Mode
+Automatic archival             Enabled
+Archive destination            USE_DB_RECOVERY_FILE_DEST
+Oldest online log sequence     61903
+Next log sequence to archive   61908
+Current log sequence           61908
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:33:06 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> disable database esakdb;
+Disabled.
+DGMGRL> enable database esakdb;
+Enabled.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 18 seconds ago)
+
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+
+  Members Not Receiving Redo:
+  ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 50 seconds ago)
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:42:41 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> show parameter dg_broker_start
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+dg_broker_start                      boolean
+TRUE
+SQL> show database INSISDR redoroutes
+SP2-0158: unknown SHOW option "database"
+SP2-0158: unknown SHOW option "INSISDR"
+SP2-0158: unknown SHOW option "redoroutes"
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:47:56 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> show database INSISDR redoroutes
+  RedoRoutes = '(LOCAL : ESAKLG ASYNC, ESAKDB ASYNC)'
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:48:29 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> show parameter log_archive_dest
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest                     string
+
+log_archive_dest_1                   string
+LOCATION=USE_DB_RECOVERY_FILE_
+DEST valid_for=(all_logfiles,a
+ll_roles) db_unique_name=INSIS
+DR
+log_archive_dest_10                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_11                  string
+
+log_archive_dest_12                  string
+
+log_archive_dest_13                  string
+
+log_archive_dest_14                  string
+
+log_archive_dest_15                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_16                  string
+
+log_archive_dest_17                  string
+
+log_archive_dest_18                  string
+
+log_archive_dest_19                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_2                   string
+service="esaklg", ASYNC NOAFFI
+RM delay=0 optional compressio
+n=disable max_failure=0 reopen
+=300 db_unique_name="ESAKLG" n
+et_timeout=30, valid_for=(onli
+ne_logfile,all_roles)
+log_archive_dest_20                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_21                  string
+
+log_archive_dest_22                  string
+
+log_archive_dest_23                  string
+
+log_archive_dest_24                  string
+
+log_archive_dest_25                  string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_26                  string
+
+log_archive_dest_27                  string
+
+log_archive_dest_28                  string
+
+log_archive_dest_29                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_3                   string
+service="esakdb", ASYNC NOAFFI
+RM delay=0 optional compressio
+n=disable max_failure=0 reopen
+=300 db_unique_name="ESAKDB" n
+et_timeout=30, valid_for=(onli
+ne_logfile,all_roles)
+log_archive_dest_30                  string
+
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_31                  string
+
+log_archive_dest_4                   string
+
+log_archive_dest_5                   string
+
+log_archive_dest_6                   string
+
+log_archive_dest_7                   string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+
+log_archive_dest_8                   string
+
+log_archive_dest_9                   string
+
+log_archive_dest_state_1             string
+enable
+log_archive_dest_state_10            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_11            string
+enable
+log_archive_dest_state_12            string
+enable
+log_archive_dest_state_13            string
+enable
+log_archive_dest_state_14            string
+enable
+log_archive_dest_state_15            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_16            string
+enable
+log_archive_dest_state_17            string
+enable
+log_archive_dest_state_18            string
+enable
+log_archive_dest_state_19            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_2             string
+ENABLE
+log_archive_dest_state_20            string
+enable
+log_archive_dest_state_21            string
+enable
+log_archive_dest_state_22            string
+enable
+log_archive_dest_state_23            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_24            string
+enable
+log_archive_dest_state_25            string
+enable
+log_archive_dest_state_26            string
+enable
+log_archive_dest_state_27            string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_28            string
+enable
+log_archive_dest_state_29            string
+enable
+log_archive_dest_state_3             string
+ENABLE
+log_archive_dest_state_30            string
+enable
+log_archive_dest_state_31            string
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+enable
+log_archive_dest_state_4             string
+enable
+log_archive_dest_state_5             string
+enable
+log_archive_dest_state_6             string
+enable
+log_archive_dest_state_7             string
+enable
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+log_archive_dest_state_8             string
+enable
+log_archive_dest_state_9             string
+enable
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:49:14 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+    ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 59 seconds ago)
+
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+    ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 61 seconds ago)
+
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+    ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 35 seconds ago)
+
+DGMGRL> show database esakdb
+
+Database - ESAKDB
+
+  Role:               PHYSICAL STANDBY
+  Intended State:     APPLY-ON
+  Transport Lag:      0 seconds (computed 0 seconds ago)
+  Apply Lag:          0 seconds (computed 0 seconds ago)
+  Average Apply Rate: 43.00 KByte/s
+  Real Time Query:    ON
+  Instance(s):
+    ESAKDB1 (apply instance)
+    ESAKDB2
+
+Database Status:
+SUCCESS
+
+DGMGRL> show database insisdr
+
+Database - INSISDR
+
+  Role:               PRIMARY
+  Intended State:     TRANSPORT-ON
+  Instance(s):
+    INSISDR1
+    INSISDR2
+
+Database Status:
+SUCCESS
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 00:52:31 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> alter system switch logfile;
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> /
+
+System altered.
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 00:54:51 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+    ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 51 seconds ago)
+
+DGMGRL> exit
+[oracle@e75lrl1054 ~]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 01:11:17 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';SQL> SQL> SQL> SQL>   2    3
+
+no rows selected
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ which tfactl
+/usr/bin/tfactl
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ ls -ld /usr/bin/tfactl
+lrwxrwxrwx 1 root root 30 May 12 22:22 /usr/bin/tfactl -> /opt/oracle.ahf/tfa/bin/tfactl
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$
+[oracle@e75lrl1054 ~]$ /opt/oracle.ahf/tfa/bin/tfactl diagcollect -srdc dbdataguard
+WARNING - AHF Software is older than 180 days. Please consider upgrading AHF to the latest version using ahfctl upgrade.
+Enter the Database Name [Required for this SRDC] : INSISDR
+Enter the time of the problem [YYYY-MM-DD HH24:MI:SS,<RETURN>=ALL] : 2026-06-13 22:00:00
+Do you wish to perform remote connectivity checks (sqlplus) to databases in this Dataguard configuration[N] [Required for this SRDC]:
+Do you grant TFA permissions to collect SQLNet Configuration Files from the system?[N] [Required for this SRDC]:
+
+Components included in this collection: OS DATABASE DATAGUARD CHMOS
+
+Preparing to execute support diagnostic scripts.
+ Executing DB Script srdc_fra_details.sql on INSISDR with timeout of 300 seconds...
+
+Collecting data for all nodes
+
+TFA is using system timezone for collection, All times shown in CEST.
+Scanning files from 2026-06-13 16:00:00 CEST to 2026-06-14 01:25:50 CEST
+
+Collection Id : 20260614012602e75lrl1054
+
+Detailed Logging at : /g01/app/grid_base/tfa/repository/srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all/diagcollect_20260614012602_e75lrl1054.log
+
+Waiting up to 60 seconds for collection to start
+2026/06/14 01:26:10 CEST : NOTE : Any file or directory name containing the string .com will be renamed to replace .com with dotcom
+2026/06/14 01:26:10 CEST : Collection Name : tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+2026/06/14 01:26:10 CEST : Collecting diagnostics from hosts : [e75lrl1055, e75lrl1054]
+2026/06/14 01:26:30 CEST : Getting list of files satisfying time range [06/13/2026 16:00:00, 06/14/2026 01:25:50]
+2026/06/14 01:26:30 CEST : Collecting Additional Diagnostic Information...
+2026/06/14 01:27:11 CEST : Executing SQLNET Collection Script with timeout of 3600 seconds...
+2026/06/14 01:27:13 CEST : Executing SQL Script db_feature_usage.sql on insisdr with timeout of 600 seconds...
+2026/06/14 01:27:13 CEST : Executing Collection for OS with timeout of 1800 seconds...
+2026/06/14 01:27:17 CEST : Executing Collection for DATAGUARD with timeout of 1860 seconds...
+2026/06/14 01:28:17 CEST : Collecting ADR incident files...
+2026/06/14 01:29:43 CEST : Completed Collection of Additional Diagnostic Information...
+2026/06/14 01:29:57 CEST : Completed Local Collection
+2026/06/14 01:29:57 CEST : Not Redacting this Collection ...
+2026/06/14 01:29:57 CEST : Remote Collection in Progress...
+2026/06/14 01:30:43 CEST : Collection completed on host: e75lrl1055
+2026/06/14 01:30:43 CEST : Collection completed on host: e75lrl1054
+2026/06/14 01:30:42 CEST : Completed collection of zip files.
+
+.--------------------------------------.
+|          Collection Summary          |
++------------+-----------+------+------+
+| Host       | Status    | Size | Time |
++------------+-----------+------+------+
+| e75lrl1055 | Completed | 66MB | 232s |
+| e75lrl1054 | Completed | 86MB | 227s |
+'------------+-----------+------+------'
+
+Logs are being collected to: /g01/app/grid_base/tfa/repository/srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all
+/g01/app/grid_base/tfa/repository/srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all/e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+/g01/app/grid_base/tfa/repository/srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all/e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+[oracle@e75lrl1054 ~]$ cd /g01/app/grid_base/tfa/repository/
+[oracle@e75lrl1054 repository]$ ls -ltr
+total 8
+drwxr----t 7 root   root       69 May 12 14:36 suptools
+drwx------ 2 root   root     4096 Jun 13 23:28 collection_Sat_Jun_13_23_22_49_CEST_2026_node_e75lrl1054
+drwx------ 2 oracle oinstall 4096 Jun 14 01:30 srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all
+[oracle@e75lrl1054 repository]$ cd /g01/app/grid_base/tfa/repository/srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all/
+[oracle@e75lrl1054 srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all]$ ls -ltr
+total 150016
+-rw-r--r-- 1 oracle oinstall     9070 Jun 14 01:26 e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip.json
+-rw-r--r-- 1 oracle oinstall     1645 Jun 14 01:29 e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip.txt
+-rw-r--r-- 1 oracle oinstall 86492668 Jun 14 01:29 e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+-rw-r--r-- 1 oracle oinstall 67080212 Jun 14 01:30 e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+-rw-r--r-- 1 oracle oinstall     1624 Jun 14 01:30 e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip.txt
+-rw-r--r-- 1 oracle oinstall     3245 Jun 14 01:30 diagcollect_20260614012602_e75lrl1055.log
+-rw-r--r-- 1 oracle oinstall     1449 Jun 14 01:30 diagcollect_console_20260614012602_e75lrl1054.log
+-rw-r--r-- 1 oracle oinstall     5899 Jun 14 01:30 diagcollect_20260614012602_e75lrl1054.log
+[oracle@e75lrl1054 srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all]$ cp e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip /tmp
+[oracle@e75lrl1054 srdc_dbdataguard_collection_Sun_Jun_14_01_26_04_CEST_2026_node_all]$ cd /tmp
+[oracle@e75lrl1054 tmp]$ ls -ltr
+total 150056
+drwxr-xr-x. 2 root             root                    6 May  5 06:32 e75lrl1501_audit
+drwxr-xr-x. 2 root             root                    6 May  6 04:12 snow
+drwxrwx---. 3 grid             oinstall               20 May 11 15:58 diag
+drwxr-xr-x. 2 grid             oinstall                6 May 12 14:43 cvutrace_grid
+drwxr-xr-x  3 grid             oinstall               21 May 12 22:28 CVU_19.0.0.0.0_resource
+drwxr-xr-x. 3 grid             oinstall               21 May 12 22:37 CVU_19.0.0.0.0_grid
+drwxrwx---  2 root             oinstall                6 May 14 05:47 locks
+drwxr-xr-x  2 oracle           oinstall                6 May 15 13:01 OraInstall2026-05-15_01-00-50PM
+drwxr-xr-x  2 oracle           oinstall                6 May 15 13:01 OraInstall2026-05-15_01-01-41PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 16:08 OraInstall2026-05-17_04-08-44PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 16:26 OraInstall2026-05-17_04-26-18PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 16:35 OraInstall2026-05-17_04-35-28PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 17:04 OraInstall2026-05-17_05-04-03PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 17:42 OraInstall2026-05-17_05-42-32PM
+drwxr-xr-x  2 oracle           oinstall                6 May 18 09:14 OraInstall2026-05-18_09-14-02AM
+drwxr-xr-x  2 oracle           oinstall                6 May 18 09:14 OraInstall2026-05-18_09-14-54AM
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm    15358 Jun  4 03:55 SNC_File_Discovery_Whitelist_f0dfb74127011100317f791cd98926a2
+-rwxr-x---  1 svc_unix_lf_itpm svc_unix_lf_itpm     6136 Jun  4 03:55 SNC_File_Discovery_Script_f0dfb74127011100317f791cd98926a2.sh
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm        7 Jun  4 03:55 SNC_File_Discovery_Pid_f0dfb74127011100317f791cd98926a2
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm      154 Jun  4 03:55 SNC_File_Discovery_Err_f0dfb74127011100317f791cd98926a2.txt
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm     1217 Jun  4 03:55 res.txt
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm     2301 Jun  4 03:55 SNC_File_Discovery_Result_f0dfb74127011100317f791cd98926a2.txt
+drwxr-x---  2 svc_unix_lf_itpm svc_unix_lf_itpm       83 Jun  4 04:38 sntmp_951600245
+-rw-r--r--  1 svctcsauto       svctcsauto           8209 Jun  4 14:50 ansible_info_10.200.129.142.csv
+-rw-------  1 c813ei           c813ei                  0 Jun  7 21:08 dbus-session-monitor.8xU3h9
+drwxr-xr-x  2 oracle           oinstall               46 Jun  8 00:36 OraInstall2026-06-08_12-36-42AM
+drwxr-x---  2 svc_unix_lf_itpm svc_unix_lf_itpm        6 Jun 11 04:13 hsperfdata_svc_unix_lf_itpm
+drwx------  3 root             root                   17 Jun 11 23:39 systemd-private-cf3bd056cfae4db9a7424f2b21f08f75-chronyd.service-LI4WzG
+drwxr-x---  3 swiagent         swiagent               17 Jun 11 23:39 SolarWinds
+drwxr-xr-x  2 oracle           oinstall               46 Jun 11 23:39 OraInstall2026-06-11_11-39-41PM
+-rw-r-----  1 oracle           oinstall            12892 Jun 13 07:46 GG_TAB_Replication2.log
+-rw-r-----  1 oracle           oinstall              922 Jun 13 07:48 GG_TAB_Replication.log
+-rw-------  1 c81d2r           c81d2r                  0 Jun 13 19:47 dbus-session-monitor.E5K4bl
+-rw-------  1 c81u51           c81u51                  0 Jun 13 19:50 dbus-session-monitor.bFy1Dv
+-rw-------  1 c81u51           c81u51                  0 Jun 13 19:51 dbus-session-monitor.HuQcdX
+drwxr-xr-x  2 oracle           oinstall               19 Jun 14 01:27 hsperfdata_oracle
+drwxr-xr-x  2 root             root                   32 Jun 14 01:29 hsperfdata_root
+drwxr-xr-x. 2 grid             oinstall               45 Jun 14 01:31 hsperfdata_grid
+-rw-r--r--  1 oracle           oinstall         86492668 Jun 14 01:32 e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+-rw-r--r--  1 oracle           oinstall         67080212 Jun 14 01:32 e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+-rw-r--r--  1 grid             oinstall              144 Jun 14 01:32 osw.hb
+[oracle@e75lrl1054 tmp]$ chmod 777 e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+[oracle@e75lrl1054 tmp]$ ls -ltr
+total 150056
+drwxr-xr-x. 2 root             root                    6 May  5 06:32 e75lrl1501_audit
+drwxr-xr-x. 2 root             root                    6 May  6 04:12 snow
+drwxrwx---. 3 grid             oinstall               20 May 11 15:58 diag
+drwxr-xr-x. 2 grid             oinstall                6 May 12 14:43 cvutrace_grid
+drwxr-xr-x  3 grid             oinstall               21 May 12 22:28 CVU_19.0.0.0.0_resource
+drwxr-xr-x. 3 grid             oinstall               21 May 12 22:37 CVU_19.0.0.0.0_grid
+drwxrwx---  2 root             oinstall                6 May 14 05:47 locks
+drwxr-xr-x  2 oracle           oinstall                6 May 15 13:01 OraInstall2026-05-15_01-00-50PM
+drwxr-xr-x  2 oracle           oinstall                6 May 15 13:01 OraInstall2026-05-15_01-01-41PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 16:08 OraInstall2026-05-17_04-08-44PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 16:26 OraInstall2026-05-17_04-26-18PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 16:35 OraInstall2026-05-17_04-35-28PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 17:04 OraInstall2026-05-17_05-04-03PM
+drwxr-xr-x  2 oracle           oinstall                6 May 17 17:42 OraInstall2026-05-17_05-42-32PM
+drwxr-xr-x  2 oracle           oinstall                6 May 18 09:14 OraInstall2026-05-18_09-14-02AM
+drwxr-xr-x  2 oracle           oinstall                6 May 18 09:14 OraInstall2026-05-18_09-14-54AM
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm    15358 Jun  4 03:55 SNC_File_Discovery_Whitelist_f0dfb74127011100317f791cd98926a2
+-rwxr-x---  1 svc_unix_lf_itpm svc_unix_lf_itpm     6136 Jun  4 03:55 SNC_File_Discovery_Script_f0dfb74127011100317f791cd98926a2.sh
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm        7 Jun  4 03:55 SNC_File_Discovery_Pid_f0dfb74127011100317f791cd98926a2
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm      154 Jun  4 03:55 SNC_File_Discovery_Err_f0dfb74127011100317f791cd98926a2.txt
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm     1217 Jun  4 03:55 res.txt
+-rw-r-----  1 svc_unix_lf_itpm svc_unix_lf_itpm     2301 Jun  4 03:55 SNC_File_Discovery_Result_f0dfb74127011100317f791cd98926a2.txt
+drwxr-x---  2 svc_unix_lf_itpm svc_unix_lf_itpm       83 Jun  4 04:38 sntmp_951600245
+-rw-r--r--  1 svctcsauto       svctcsauto           8209 Jun  4 14:50 ansible_info_10.200.129.142.csv
+-rw-------  1 c813ei           c813ei                  0 Jun  7 21:08 dbus-session-monitor.8xU3h9
+drwxr-xr-x  2 oracle           oinstall               46 Jun  8 00:36 OraInstall2026-06-08_12-36-42AM
+drwxr-x---  2 svc_unix_lf_itpm svc_unix_lf_itpm        6 Jun 11 04:13 hsperfdata_svc_unix_lf_itpm
+drwx------  3 root             root                   17 Jun 11 23:39 systemd-private-cf3bd056cfae4db9a7424f2b21f08f75-chronyd.service-LI4WzG
+drwxr-x---  3 swiagent         swiagent               17 Jun 11 23:39 SolarWinds
+drwxr-xr-x  2 oracle           oinstall               46 Jun 11 23:39 OraInstall2026-06-11_11-39-41PM
+-rw-r-----  1 oracle           oinstall            12892 Jun 13 07:46 GG_TAB_Replication2.log
+-rw-r-----  1 oracle           oinstall              922 Jun 13 07:48 GG_TAB_Replication.log
+-rw-------  1 c81d2r           c81d2r                  0 Jun 13 19:47 dbus-session-monitor.E5K4bl
+-rw-------  1 c81u51           c81u51                  0 Jun 13 19:50 dbus-session-monitor.bFy1Dv
+-rw-------  1 c81u51           c81u51                  0 Jun 13 19:51 dbus-session-monitor.HuQcdX
+drwxr-xr-x  2 oracle           oinstall               19 Jun 14 01:27 hsperfdata_oracle
+drwxr-xr-x  2 root             root                   32 Jun 14 01:29 hsperfdata_root
+-rwxrwxrwx  1 oracle           oinstall         86492668 Jun 14 01:32 e75lrl1054.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+-rwxrwxrwx  1 oracle           oinstall         67080212 Jun 14 01:32 e75lrl1055.tfa_srdc_dbdataguard_PRIMARY_Sun_Jun_14_01_26_04_CEST_2026.zip
+-rw-r--r--  1 grid             oinstall              144 Jun 14 01:32 osw.hb
+drwxr-xr-x. 2 grid             oinstall               45 Jun 14 01:32 hsperfdata_grid
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$ . oraenv
+ORACLE_SID = [INSISDR1] ?
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$ ps -ef|grep -i pmon
+grid       27995       1  0 Jun11 ?        00:00:18 asm_pmon_+ASM1
+oracle     96377       1  0 Jun12 ?        00:00:32 ora_pmon_REPODR1
+oracle     99535       1  0 Jun12 ?        00:00:37 ora_pmon_INSISDR1
+oracle   3928320 2609450  0 04:10 pts/3    00:00:00 grep --color=auto -i pmon
+[oracle@e75lrl1054 tmp]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:10:39 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", (ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM V$ARCHIVED_LOG WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,(SELECT THREAD# ,SEQUENCE# FROM V$LOG_HISTORY WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD# = APPL.THREAD# ORDER BY 1;
+
+    Thread Last Sequence Received Last Sequence Applied Difference
+---------- ---------------------- --------------------- ----------
+         1                  61926                 61926          0
+         1                  61926                 61926          0
+         1                  61926                 61926          0
+         2                  60843                 60843          0
+         2                  60843                 60843          0
+         2                  60843                 60843          0
+
+6 rows selected.
+
+SQL> SHOW PARAMETER job_queue_processes;
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+job_queue_processes                  integer
+640
+SQL> ALTER SYSTEM SET job_queue_processes = 0 SCOPE=BOTH;
+
+System altered.
+
+SQL> COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';SQL> SQL> SQL> SQL>   2    3
+
+no rows selected
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 04:15:22 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL>
+DGMGRL>
+DGMGRL>
+DGMGRL> connect sys/Lf233Ettsty1SYSupgPrd@INSISDR
+Connected to "INSISDR"
+Connected as SYSDBA.
+DGMGRL>
+DGMGRL>
+DGMGRL>
+DGMGRL> show configuration
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  INSISDR - Primary database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+    ESAKDB  - Physical standby database
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 59 second ago)
+
+DGMGRL> switchover to ESAKDB
+Performing switchover NOW, please wait...
+Operation requires a connection to database "ESAKDB"
+Connecting ...
+Connected to "ESAKDB"
+Connected as SYSDBA.
+New primary database "ESAKDB" is opening...
+Oracle Clusterware is restarting database "INSISDR" ...
+Connected to "INSISDR"
+Switchover succeeded, new primary is "esakdb"
+DGMGRL>
+DGMGRL>
+DGMGRL>
+DGMGRL> exit
+[oracle@e75lrl1054 tmp]$ ps -ef|grep -i pmon
+grid       27995       1  0 Jun11 ?        00:00:18 asm_pmon_+ASM1
+oracle     96377       1  0 Jun12 ?        00:00:33 ora_pmon_REPODR1
+oracle   3946137       1  0 04:17 ?        00:00:00 ora_pmon_INSISDR1
+oracle   3963065 2609450  0 04:23 pts/3    00:00:00 grep --color=auto -i pmon
+[oracle@e75lrl1054 tmp]$ . oraenv
+ORACLE_SID = [INSISDR1] ? INSISDR1
+The Oracle base remains unchanged with value /u01/app/oracle
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$
+[oracle@e75lrl1054 tmp]$ sqlplus / as sysdba
+
+SQL*Plus: Release 19.0.0.0.0 - Production on Sun Jun 14 04:24:56 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2023, Oracle.  All rights reserved.
+
+
+Connected to:
+Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+
+SQL> col HOST_NAME for a30
+SELECT
+    i.instance_name,
+SQL>   2    3      i.host_name,
+  4      d.name,
+  5      d.log_mode,
+  6      d.controlfile_type,
+  7      d.open_mode,
+  8      d.database_role,
+    d.switchover_status
+  9   10  FROM
+ 11      gv$database d
+ 12  JOIN
+    gv$instance i ON d.inst_id = i.inst_id; 13
+
+INSTANCE_NAME    HOST_NAME                      NAME      LOG_MODE     CONTROL
+---------------- ------------------------------ --------- ------------ -------
+OPEN_MODE            DATABASE_ROLE    SWITCHOVER_STATUS
+-------------------- ---------------- --------------------
+INSISDR1         e75lrl1054.lfnet.se            INSISDB   ARCHIVELOG   STANDBY
+READ ONLY WITH APPLY PHYSICAL STANDBY NOT ALLOWED
+
+INSISDR2         e75lrl1055.lfnet.se            INSISDB   ARCHIVELOG   STANDBY
+READ ONLY WITH APPLY PHYSICAL STANDBY NOT ALLOWED
+
+
+SQL> set line 400
+SQL> /
+
+INSTANCE_NAME    HOST_NAME                      NAME      LOG_MODE     CONTROL OPEN_MODE            DATABASE_ROLE    SWITCHOVER_STATUS
+---------------- ------------------------------ --------- ------------ ------- -------------------- ---------------- --------------------
+INSISDR1         e75lrl1054.lfnet.se            INSISDB   ARCHIVELOG   STANDBY READ ONLY WITH APPLY PHYSICAL STANDBY NOT ALLOWED
+INSISDR2         e75lrl1055.lfnet.se            INSISDB   ARCHIVELOG   STANDBY READ ONLY WITH APPLY PHYSICAL STANDBY NOT ALLOWED
+
+SQL>
+SQL>
+SQL>
+SQL> show parameter job_queue_processes
+
+NAME                                 TYPE                             VALUE
+------------------------------------ -------------------------------- ------------------------------
+job_queue_processes                  integer                          0
+SQL> ALTER SYSTEM SET job_queue_processes = 640 SCOPE=BOTH sid='*';
+
+System altered.
+
+SQL> exit
+Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+Version 19.23.0.0.0
+[oracle@e75lrl1054 tmp]$ dgmgrl /
+DGMGRL for Linux: Release 19.0.0.0.0 - Production on Sun Jun 14 04:39:05 2026
+Version 19.23.0.0.0
+
+Copyright (c) 1982, 2019, Oracle and/or its affiliates.  All rights reserved.
+
+Welcome to DGMGRL, type "help" for information.
+Connected to "INSISDR"
+Connected as SYSDG.
+DGMGRL> edit instance 'INSISDR1' on database 'INSISDR' set property LogArchiveTrace = 0;
+Property "logarchivetrace" updated
+DGMGRL> edit configuration set property tracelevel=USER;
+Property "tracelevel" updated
+DGMGRL> show configuration TraceLevel;
+  TraceLevel = 'USER'

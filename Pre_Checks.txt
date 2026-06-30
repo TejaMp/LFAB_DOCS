@@ -1,0 +1,566 @@
+Primary:
++++++++++
+
+DGMGRL> show configuration;
+
+Configuration - insisdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  ESAKDB  - Primary database
+    INSISDR - Physical standby database
+    ESAKLG  - Logical standby database
+      Warning: ORA-16853: apply lag has exceeded specified threshold
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+WARNING   (status updated 42 seconds ago)
+
+
+
+DGMGRL> show database ESAKDB
+
+Database - ESAKDB
+
+  Role:               PRIMARY
+  Intended State:     TRANSPORT-ON
+  Instance(s):
+    ESAKDB1
+    ESAKDB2
+
+Database Status:
+SUCCESS
+
+DGMGRL> show database INSISDR;
+
+Database - INSISDR
+
+  Role:               PHYSICAL STANDBY
+  Intended State:     APPLY-ON
+  Transport Lag:      0 seconds (computed 1 second ago)
+  Apply Lag:          0 seconds (computed 1 second ago)
+  Average Apply Rate: 3.70 MByte/s
+  Real Time Query:    ON
+  Instance(s):
+    INSISDR1 (apply instance)
+    INSISDR2
+
+Database Status:
+SUCCESS
+
+DGMGRL> show database 'ESAKDB' logxptstatus;
+LOG TRANSPORT STATUS
+PRIMARY_INSTANCE_NAME STANDBY_DATABASE_NAME     STATUS                ERROR
+             ESAKDB1              INSISDR      VALID
+             ESAKDB1               ESAKLG      VALID
+             ESAKDB2              INSISDR      VALID
+             ESAKDB2               ESAKLG      VALID
+
+DGMGRL> show database 'ESAKDB' inconsistentlogxptprops;
+INCONSISTENT LOG TRANSPORT PROPERTIES
+   INSTANCE_NAME         STANDBY_NAME        PROPERTY_NAME         MEMORY_VALUE         BROKER_VALUE
+
+DGMGRL>
+
+
+DGMGRL> show database verbose ESAKDB;
+
+Database - ESAKDB
+
+  Role:               PRIMARY
+  Intended State:     TRANSPORT-ON
+  Instance(s):
+    ESAKDB1
+    ESAKDB2
+
+  Properties:
+    DGConnectIdentifier             = 'ESAKDB'
+    ObserverConnectIdentifier       = ''
+    FastStartFailoverTarget         = ''
+    PreferredObserverHosts          = ''
+    LogShipping                     = 'ON'
+    RedoRoutes                      = ''
+    LogXptMode                      = 'ASYNC'
+    DelayMins                       = '0'
+    Binding                         = 'OPTIONAL'
+    MaxFailure                      = '0'
+    ReopenSecs                      = '300'
+    NetTimeout                      = '30'
+    RedoCompression                 = 'DISABLE'
+    PreferredApplyInstance          = ''
+    ApplyInstanceTimeout            = '0'
+    ApplyLagThreshold               = '30'
+    TransportLagThreshold           = '30'
+    TransportDisconnectedThreshold  = '30'
+    ApplyParallel                   = 'AUTO'
+    ApplyInstances                  = '0'
+    LsbyMaxEventsRecorded           = '0'
+    LsbyPreserveCommitOrder         = ''
+    LsbyRecordSkipErrors            = ''
+    LsbyRecordSkipDdl               = ''
+    LsbyRecordAppliedDdl            = ''
+    LsbyMaxSga                      = '0'
+    LsbyMaxServers                  = '0'
+    StandbyFileManagement           = ''
+    ArchiveLagTarget                = '0'
+    LogArchiveMaxProcesses          = '0'
+    LogArchiveMinSucceedDest        = '0'
+    DataGuardSyncLatency            = '0'
+    LogArchiveTrace                 = '0'
+    LogArchiveFormat                = ''
+    DbFileNameConvert               = ''
+    LogFileNameConvert              = ''
+    ArchiveLocation                 = ''
+    AlternateLocation               = ''
+    StandbyArchiveLocation          = ''
+    StandbyAlternateLocation        = ''
+    InconsistentProperties          = '(monitor)'
+    InconsistentLogXptProps         = '(monitor)'
+    LogXptStatus                    = '(monitor)'
+    SendQEntries                    = '(monitor)'
+    RecvQEntries                    = '(monitor)'
+    LsbyParameters                  = '(monitor)'
+    LsbyFailedTxnInfo               = '(monitor)'
+    HostName(*)
+    StaticConnectIdentifier(*)
+    TopWaitEvents(*)
+    SidName(*)
+    (*) - Please check specific instance for the property value
+
+  Log file locations(*):
+    (*) - Check specific instance for log file locations.
+
+Database Status:
+SUCCESS
+
+DGMGRL> show database verbose INSISDR;
+
+Database - INSISDR
+
+  Role:               PHYSICAL STANDBY
+  Intended State:     APPLY-ON
+  Transport Lag:      0 seconds (computed 0 seconds ago)
+  Apply Lag:          0 seconds (computed 0 seconds ago)
+  Average Apply Rate: 3.70 MByte/s
+  Active Apply Rate:  1.11 MByte/s
+  Maximum Apply Rate: 125.05 MByte/s
+  Real Time Query:    ON
+  Instance(s):
+    INSISDR1 (apply instance)
+    INSISDR2
+
+  Properties:
+    DGConnectIdentifier             = 'insisdr'
+    ObserverConnectIdentifier       = ''
+    FastStartFailoverTarget         = ''
+    PreferredObserverHosts          = ''
+    LogShipping                     = 'ON'
+    RedoRoutes                      = '(LOCAL : ESAKLG ASYNC)'
+    LogXptMode                      = 'ASYNC'
+    DelayMins                       = '0'
+    Binding                         = 'optional'
+    MaxFailure                      = '0'
+    ReopenSecs                      = '300'
+    NetTimeout                      = '30'
+    RedoCompression                 = 'DISABLE'
+    PreferredApplyInstance          = ''
+    ApplyInstanceTimeout            = '0'
+    ApplyLagThreshold               = '30'
+    TransportLagThreshold           = '30'
+    TransportDisconnectedThreshold  = '30'
+    ApplyParallel                   = 'AUTO'
+    ApplyInstances                  = '0'
+    StandbyFileManagement           = ''
+    ArchiveLagTarget                = '0'
+    LogArchiveMaxProcesses          = '0'
+    LogArchiveMinSucceedDest        = '0'
+    DataGuardSyncLatency            = '0'
+    LogArchiveTrace                 = '0'
+    LogArchiveFormat                = ''
+    DbFileNameConvert               = ''
+    LogFileNameConvert              = ''
+    ArchiveLocation                 = ''
+    AlternateLocation               = ''
+    StandbyArchiveLocation          = ''
+    StandbyAlternateLocation        = ''
+    InconsistentProperties          = '(monitor)'
+    InconsistentLogXptProps         = '(monitor)'
+    LogXptStatus                    = '(monitor)'
+    SendQEntries                    = '(monitor)'
+    RecvQEntries                    = '(monitor)'
+    HostName(*)
+    StaticConnectIdentifier(*)
+    TopWaitEvents(*)
+    SidName(*)
+    (*) - Please check specific instance for the property value
+
+  Log file locations(*):
+    (*) - Check specific instance for log file locations.
+
+Database Status:
+SUCCESS
+
+DGMGRL>
+
+DGMGRL> validate database ESAKDB;
+
+  Database Role:    Primary database
+
+  Ready for Switchover:  Yes
+
+  Managed by Clusterware:
+    ESAKDB:  YES
+
+DGMGRL>
+
+DGMGRL> validate database INSISDR;
+
+  Database Role:     Physical standby database
+  Primary Database:  ESAKDB
+
+  Ready for Switchover:  Yes
+  Ready for Failover:    Yes (Primary Running)
+
+  Managed by Clusterware:
+    ESAKDB :  YES
+    INSISDR:  YES
+
+  Temporary Tablespace File Information:
+    ESAKDB TEMP Files:   14
+    INSISDR TEMP Files:  17
+
+DGMGRL>
+
+
+
+Primary log gap :
+
++++++++++++++++++
+
+SQL> SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", (ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM V$ARCHIVED_LOG WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,(SELECT THREAD# ,SEQUENCE# FROM V$LOG_HISTORY WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD# = APPL.THREAD# ORDER BY 1;
+
+    Thread Last Sequence Received Last Sequence Applied Difference
+---------- ---------------------- --------------------- ----------
+         1                  61869                 61869          0
+         1                  61869                 61869          0
+         1                  61869                 61869          0
+         2                  60794                 60794          0
+         2                  60794                 60794          0
+         2                  60794                 60794          0
+
+6 rows selected.
+
+SQL> show parameter db_name;
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+db_name                              string
+INSISDB
+SQL> show parameter db_unique
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+db_unique_name                       string
+ESAKDB
+SQL> select thread#, max(sequence#) "Last Standby Seq Received"
+from gv$archived_log val, gv$database vdb
+where val.resetlogs_change# = vdb.resetlogs_change#
+group by thread# order by 1;  2    3    4
+
+   THREAD# Last Standby Seq Received
+---------- -------------------------
+         1                     61869
+         2                     60794
+
+SQL> select   thread#, max(sequence#) "Last Primary Seq Generated"
+           from     v$archived_log val, v$database vdb
+           where    val.resetlogs_change# = vdb.resetlogs_change#
+           group by thread# order by 1;  2    3    4
+
+   THREAD# Last Primary Seq Generated
+---------- --------------------------
+         1                      61869
+         2                      60794
+
+SQL> set lines 300
+SELECT thread#, dest_id, gvad.status, error, fail_sequence FROM gv$archive_dest gvad, gv$instance gvi WHERE gvad.inst_id = gvi.inst_id AND destination is NOT NULL ORDER BY thread#, dest_id;SQL>
+
+   THREAD#    DEST_ID STATUS    ERROR                                                             FAIL_SEQUENCE
+---------- ---------- --------- ----------------------------------------------------------------- -------------
+         1          1 VALID                                                                                   0
+         1          2 VALID                                                                                   0
+         1          3 VALID                                                                                   0
+         2          1 VALID                                                                                   0
+         2          2 VALID                                                                                   0
+         2          3 VALID                                                                                   0
+
+6 rows selected.
+
+SQL>
+
+
+SQL> SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", APPL.SEQUENCE# "Last Sequence Applied", (ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference" FROM (SELECT THREAD# ,SEQUENCE# FROM V$ARCHIVED_LOG WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,(SELECT THREAD# ,SEQUENCE# FROM V$LOG_HISTORY WHERE (THREAD#,FIRST_TIME ) IN (SELECT THREAD#,MAX(FIRST_TIME) FROM V$LOG_HISTORY GROUP BY THREAD#)) APPL WHERE ARCH.THREAD# = APPL.THREAD# ORDER BY 1;
+
+    Thread Last Sequence Received Last Sequence Applied Difference
+---------- ---------------------- --------------------- ----------
+         1                  61869                 61869          0
+         2                  60795                 60795          0
+
+SQL> select thread#, max(sequence#) "Last Standby Seq Received"
+from gv$archived_log val, gv$database vdb
+where val.resetlogs_change# = vdb.resetlogs_change#
+group by thread# order by 1;  2    3    4
+
+   THREAD# Last Standby Seq Received
+---------- -------------------------
+         1                     61870
+         2                     60795
+
+SQL> select   thread#, max(sequence#) "Last Standby Seq Received"
+           from     v$archived_log val, v$database vdb
+           where    val.resetlogs_change# = vdb.resetlogs_change#
+           group by thread# order by 1;  2    3    4
+
+   THREAD# Last Standby Seq Received
+---------- -------------------------
+         1                     61870
+         2                     60795
+
+SQL> select    thread#, max(sequence#) "Last Standby Seq Applied"
+  2             from     v$archived_log val, v$database vdb
+  3             where    val.resetlogs_change# = vdb.resetlogs_change#
+           and      val.applied in ('YES','IN-MEMORY')
+           group by thread# order by 1;  4    5
+
+   THREAD# Last Standby Seq Applied
+---------- ------------------------
+         1                    61870
+         2                    60795
+
+SQL> select process,thread#,sequence#,status from gv$managed_standby;
+
+PROCESS      THREAD#  SEQUENCE# STATUS
+--------- ---------- ---------- ------------
+DGRD               0          0 ALLOCATED
+ARCH               2      60795 CLOSING
+DGRD               0          0 ALLOCATED
+ARCH               1      61870 CLOSING
+ARCH               1      61865 CLOSING
+ARCH               1      61869 CLOSING
+RFS                1          0 IDLE
+MRP0               1      61871 APPLYING_LOG
+RFS                1      61871 RECEIVING
+RFS                2      60796 RECEIVING
+RFS                2          0 IDLE
+
+PROCESS      THREAD#  SEQUENCE# STATUS
+--------- ---------- ---------- ------------
+DGRD               0          0 ALLOCATED
+ARCH               2      60548 CLOSING
+DGRD               0          0 ALLOCATED
+ARCH               0          0 CONNECTED
+ARCH               2      60551 CLOSING
+ARCH               1      61619 CLOSING
+RFS                0          0 IDLE
+RFS                0          0 IDLE
+RFS                0          0 IDLE
+RFS                0          0 IDLE
+RFS                0          0 IDLE
+
+PROCESS      THREAD#  SEQUENCE# STATUS
+--------- ---------- ---------- ------------
+RFS                0          0 IDLE
+
+23 rows selected.
+
+SQL> show parameter db_uniq
+
+NAME                                 TYPE
+------------------------------------ --------------------------------
+VALUE
+------------------------------
+db_unique_name                       string
+INSISDR
+SQL>
+
+
+B.2
+
+SQL> set pagesize 999
+SQL> /
+
+FILENAME                                                          BYTES TABLESPACE
+------------------------------------------------------------ ---------- ------------------------------
++DATA/ESAKDB/TEMPFILE/temp.746.1202741427                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.745.1202741427                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.744.1202741425                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.743.1202741425                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.751.1202991907                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.752.1202991921                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.699.1231332735                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.698.1231332741                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.697.1231332747                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/temp.696.1231332781                    3.2212E+10 TEMP
++DATA/ESAKDB/TEMPFILE/tempmig01.747.1202741427               1.0737E+10 TEMPMIG01
++DATA/ESAKDB/TEMPFILE/uprod_ias_temp.748.1202741427           104857600 UPROD_IAS_TEMP
++DATA/ESAKDB/TEMPFILE/dvr_ias_temp.749.1202741427            1073741824 DVR_IAS_TEMP
++DATA/ESAKDB/TEMPFILE/prd_ias_temp.753.1202991931             104857600 PRD_IAS_TEMP
+
+14 rows selected.
+
+SQL> COL name FOR a60
+    SELECT ts#, name, status FROM v$tempfile;SQL>
+
+       TS# NAME                                                         STATUS
+---------- ------------------------------------------------------------ -------
+         3 +DATA/ESAKDB/TEMPFILE/temp.746.1202741427                    ONLINE
+        12 +DATA/ESAKDB/TEMPFILE/tempmig01.747.1202741427               ONLINE
+        31 +DATA/ESAKDB/TEMPFILE/uprod_ias_temp.748.1202741427          ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.745.1202741427                    ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.744.1202741425                    ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.743.1202741425                    ONLINE
+        43 +DATA/ESAKDB/TEMPFILE/dvr_ias_temp.749.1202741427            ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.751.1202991907                    ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.752.1202991921                    ONLINE
+        54 +DATA/ESAKDB/TEMPFILE/prd_ias_temp.753.1202991931            ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.699.1231332735                    ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.698.1231332741                    ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.697.1231332747                    ONLINE
+         3 +DATA/ESAKDB/TEMPFILE/temp.696.1231332781                    ONLINE
+
+14 rows selected.
+
+SQL> select name,open_mode,database_role from gv$database;
+
+NAME                                                         OPEN_MODE            DATABASE_ROLE
+------------------------------------------------------------ -------------------- ----------------
+INSISDB                                                      READ WRITE           PRIMARY
+INSISDB                                                      READ WRITE           PRIMARY
+
+SQL>
+
+
+3. Archive Log Sequence Synchronization
+
+SQL> SELECT thread#, MAX(sequence#) "Last Primary Seq Generated"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+     GROUP BY thread#
+     ORDER BY 1;  2    3    4    5
+
+   THREAD# Last Primary Seq Generated
+---------- --------------------------
+         1                      61872
+         2                      60797
+On standby :
+++++++++++++++++++++++
+SQL> SELECT thread#, MAX(sequence#) "Last Standby Seq Received"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+     GROUP BY thread#
+     ORDER BY 1;  2    3    4    5
+
+   THREAD# Last Standby Seq Received
+---------- -------------------------
+         1                     61872
+         2                     60797
+
+
+
+SQL> SELECT thread#, MAX(sequence#) "Last Standby Seq Applied"
+      FROM gv$archived_log val, gv$database vdb
+     WHERE val.resetlogs_change# = vdb.resetlogs_change#
+       AND val.applied IN ('YES','IN-MEMORY')
+     GROUP BY thread#
+     ORDER BY 1;  2    3    4    5    6
+
+   THREAD# Last Standby Seq Applied
+---------- ------------------------
+         1                    61872
+         2                    60797
+
+
+4. Check for Offline Datafiles (on Primary)
++++++++++++++++++++++++++++++++++++++++++++++++++
+
+SQL> SELECT name FROM v$datafile WHERE status = 'OFFLINE';
+
+no rows selected
+
+SQL>
+
+
+5. Primary Database: Clear Blocking Scheduler Jobs
+
+SQL> SHOW PARAMETER job_queue_processes;
+
+NAME                                 TYPE                             VALUE
+------------------------------------ -------------------------------- ------------------------------
+job_queue_processes                  integer                          640
+SQL>
+SQL>
+SQL> show parameter db_unique
+
+NAME                                 TYPE                             VALUE
+------------------------------------ -------------------------------- ------------------------------
+db_unique_name                       string                           ESAKDB
+SQL>
+
+SQL> COL owner FOR a20;
+    COL job_name FOR a30;
+    COL start_date FOR a50;
+    COL end_date FOR a20;
+    SELECT owner, job_name, start_date, end_date, enabled
+      FROM dba_scheduler_jobs
+     WHERE enabled = 'TRUE' AND owner <> 'SYS';SQL> SQL> SQL> SQL>   2    3
+
+OWNER                JOB_NAME                       START_DATE                                         END_DATE             ENABL
+-------------------- ------------------------------ -------------------------------------------------- -------------------- -----
+INSIS_SCHEDULER      test_timeoutjob                28-NOV-20 10.13.00.000000 AM EUROPE/STOCKHOLM                           TRUE
+INSIS_SCHEDULER      test_approletimeout            28-NOV-20 10.12.00.000000 AM EUROPE/STOCKHOLM                           TRUE
+APEX_240200          ORACLE_APEX_PURGE_SESSIONS     17-APR-25 06.30.30.315021 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_MAIL_QUEUE         17-APR-25 06.30.30.541242 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_PWA_PUSH_QUEUE     17-APR-25 06.30.30.555195 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_WS_NOTIFICATIONS   17-APR-25 06.30.30.560296 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_DAILY_MAINTENANCE  17-APR-25 06.30.30.672849 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_REST_SOURCE_SYNC   17-APR-25 06.30.30.683647 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_AUTOMATIONS        17-APR-25 06.30.30.696189 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_BG_PROCESSES       17-APR-25 06.30.30.704044 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_TASKS_PURGE        17-APR-25 06.30.30.713370 AM +02:00                                     TRUE
+INSIS_CUST           TRG_INEP05_CREATE_4506734                                                                              TRUE
+APEX_240200          APEX$AUTOMATION_15471080207000                                                                         TRUE
+                     2549
+
+APEX_240200          ORACLE_APEX_WF_TIMEOUT         17-APR-25 06.30.30.953459 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_TASKS_EXPIRE       17-APR-25 06.30.30.938863 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_WFS_PURGE          17-APR-25 06.30.31.175118 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_AUTO_APPROVAL      17-APR-25 06.30.31.182555 AM +02:00                                     TRUE
+APEX_240200          ORACLE_APEX_DAILY_METRICS      17-APR-25 06.30.31.293201 AM +02:00                                     TRUE
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475186            10-JUN-26 03.15.01.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475174            10-JUN-26 03.14.59.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475202            10-JUN-26 03.15.33.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+ETTSAK_CAPT_NORMALIZ MV_RF$J_0_S_4475210            10-JUN-26 03.16.12.000000 PM EUROPE/STOCKHOLM                           TRUE
+ED
+
+INSIS_DB_AUDIT       CLEANUP_AUDIT_TABLE            06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+INSIS_DB_AUDIT       AUDIT_DATA_MAINTENANCE_JOB     06-NOV-24 04.37.24.000000 AM EUROPE/STOCKHOLM                           TRUE
+
+24 rows selected.
+
+SQL>
+
+
+
+DGMGRL> SHOW INSTANCE 'ESAKDB1' LogArchiveTrace ON DATABASE 'ESAKDB';
+  logarchivetrace = '0'

@@ -1,0 +1,451 @@
+--TNS ENTRY 
+
+[grid@e75lrl1055 ~]$ sqlplus sys/Rep123dbProd@\"\(DESCRIPTION=\(ADDRESS=\(PROTOCOL=TCP\)\(HOST=e75lrl1055-vip.lfnet.se\)\(PORT=1521\)\)\(CONNECT_DATA=\(SERVICE_NAME=REPOSDB\)\(UR=A\)\)\)\" as sysdba
+
+# PROD database TNS (on both nodes if it RAC )
+
+
+REPODB =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = insis-db-scan.lfnet.se)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVICE_NAME = REPODB)
+    )
+  )
+
+REPODR =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = insis-dr-scan)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVICE_NAME = REPODR)
+      (UR = A)
+    )
+  )
+
+# IN STANDBY: (on both nodes if it RAC )
+
+REPODB =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = insis-db-scan.lfnet.se)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVICE_NAME = REPODB)
+    )
+  )
+
+REPODR =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = insis-dr-scan)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVICE_NAME = REPODR)
+      (UR = A)
+    )
+  )
+
+
+Need to copy the pfile from prod and change it accordingly as standby
+
+============== in PRIMARY DATABASE ================
+create pfile='/tmp/initstby_db.ora' from spfile;
+
+log_archive_dest_1 = 'location=USE_DB_RECOVERY_FILE_DEST'
+log_archive_dest_2 = 'service=stby_db async valid_for=(ONLINE_LOGFILES,PRIMARY_ROLE) db_unique_name=stby_db'
+log_archive_dest_state_2 = 'defer'
+log_archive_config= 'dg_config=(prim_db,stby_db)'
+log_archive_max_processes = 8
+
+
+ALTER SYSTEM SET LOG_ARCHIVE_DEST_1='LOCATION=USE_DB_RECOVERY_FILE_DEST' 'valid_for=(ALL_LOGFILES, ALL_ROLES)' db_unique_name=INSPRIM scope=both sid='*';
+ALTER SYSTEM SET LOG_ARCHIVE_DEST_2='SERVICE=INSDRSTD LGWR ASYNC NOAFFIRM delay=0 optional compression=disable max_failure=0 max_connections=1 reopen=300 VALID_FOR=(ONLINE_LOGFILES,PRIMARY_ROLE) DB_UNIQUE_NAME=INSDRSTD' scope=both sid='*';
+ALTER SYSTEM SET LOG_ARCHIVE_DEST_STATE_2='defer' scope=both sid='*';
+ALTER SYSTEM SET LOG_ARCHIVE_CONFIG='DG_CONFIG=(INSPRIM,INSDRSTD)' scope=both sid='*';
+alter SYSTEM set log_archive_max_processes=8 SCOPE=both sid='*';
+
+
+======================================================
+ Modify the following Initialization Parameters in the PFILE (initstby_db.ora) for the Standby Database we created before:
+
+log_archive_dest_1 = 'location=USE_DB_RECOVERY_FILE_DEST'
+log_archive_config= 'dg_config=(INSPRIM,INSDRTSD)'
+log_archive_max_processes = 8
+fal_server = 'prim_db'
+log_file_name_convert = '<absolute path or asm diskgroup name of primary online redo log files>','<absolute path or asm diskgroup name of standby online redo log files>'
+db_file_name_convert = '<absolute path or asm diskgroup name of primary data files>','<absolute path or asm diskgroup name of standby data files>'
+db_unique_name = 'stby_db'
+
+
+
+
+[oracle@e75lrl1054 tmp]$ cat initrepodbr1.ora
+REPODR2.__data_transfer_cache_size=0
+REPODR1.__data_transfer_cache_size=0
+*.__db_cache_size=1120M
+REPODR2.__db_cache_size=922746880
+REPODR1.__db_cache_size=805306368
+REPODR2.__inmemory_ext_roarea=0
+REPODR1.__inmemory_ext_roarea=0
+REPODR2.__inmemory_ext_rwarea=0
+REPODR1.__inmemory_ext_rwarea=0
+REPODR2.__java_pool_size=0
+REPODR1.__java_pool_size=0
+REPODR2.__large_pool_size=83886080
+REPODR1.__large_pool_size=83886080
+*.__oracle_base='/u01/app/oracle'# ORACLE_BASE set from environment
+REPODR2.__pga_aggregate_target=671088640
+REPODR1.__pga_aggregate_target=671088640
+REPODR2.__sga_target=2214592512
+REPODR1.__sga_target=2214592512
+REPODB2.__shared_io_pool_size=67108864
+REPODR2.__shared_io_pool_size=0
+REPODR1.__shared_io_pool_size=83886080
+*.__shared_pool_size=672M
+REPODR2.__shared_pool_size=1174405120
+REPODR1.__shared_pool_size=1207959552
+REPODR2.__streams_pool_size=0
+REPODR1.__streams_pool_size=0
+REPODR2.__unified_pga_pool_size=0
+REPODR1.__unified_pga_pool_size=0
+*._always_anti_join='CHOOSE'
+*._always_semi_join='CHOOSE'
+*._b_tree_bitmap_plans=TRUE
+*._bloom_serial_filter='ON'
+*._complex_view_merging=TRUE
+*._compression_compatibility='19.8.0.0.0'
+*._diag_adr_trace_dest='/u01/app/oracle/diag/rdbms/repodr/REPODR1/trace'
+*._ds_xt_split_count=1
+*._eliminate_common_subexpr=TRUE
+*._fast_full_scan_enabled=TRUE
+*._generalized_pruning_enabled=TRUE
+*._gs_anti_semi_join_allowed=TRUE
+*._hang_resolution_scope='OFF'# _hang_resolution_scope updated by kjznhm
+*._improved_outerjoin_card=TRUE
+*._improved_row_length_enabled=TRUE
+*._index_join_enabled=TRUE
+*._key_vector_create_pushdown_threshold=20000
+*._ksb_restart_policy_times='0','60','120','240'# internal update to set default
+*._left_nested_loops_random=TRUE
+*._min_undosegs_for_parallel_fptr=0
+*._mv_access_compute_fresh_data='ON'
+*._new_initial_join_orders=TRUE
+*._new_sort_cost_estimate=TRUE
+*._nlj_batching_enabled=1
+*._no_recovery_through_resetlogs=TRUE
+*._optim_enhance_nnull_detection=TRUE
+*._optim_peek_user_binds=TRUE
+*._optimizer_ads_use_partial_results=TRUE
+*._optimizer_better_inlist_costing='ALL'
+*._optimizer_cbqt_or_expansion='ON'
+*._optimizer_cluster_by_rowid_control=129
+*._optimizer_control_shard_qry_processing=65528
+*._optimizer_cost_based_transformation='LINEAR'
+*._optimizer_cost_model='CHOOSE'
+*._optimizer_extended_cursor_sharing='UDO'
+*._optimizer_extended_cursor_sharing_rel='SIMPLE'
+*._optimizer_extended_stats_usage_control=192
+*._optimizer_join_order_control=3
+*._optimizer_max_permutations=2000
+*._optimizer_mode_force=TRUE
+*._optimizer_native_full_outer_join='FORCE'
+*._optimizer_or_expansion='DEPTH'
+*._optimizer_proc_rate_level='BASIC'
+*._optimizer_system_stats_usage=TRUE
+*._optimizer_try_st_before_jppd=TRUE
+*._optimizer_use_cbqt_star_transformation=TRUE
+*._or_expand_nvl_predicate=TRUE
+*._ordered_nested_loop=TRUE
+*._parallel_broadcast_enabled=TRUE
+*._pivot_implementation_method='CHOOSE'
+*._pred_move_around=TRUE
+*._push_join_predicate=TRUE
+*._push_join_union_view=TRUE
+*._push_join_union_view2=TRUE
+*._px_dist_agg_partial_rollup_pushdown='ADAPTIVE'
+*._px_groupby_pushdown='FORCE'
+*._px_partial_rollup_pushdown='ADAPTIVE'
+*._px_shared_hash_join=FALSE
+*._px_wif_dfo_declumping='CHOOSE'
+*._sql_model_unfold_forloops='RUN_TIME'
+*._subquery_pruning_mv_enabled=FALSE
+*._table_scan_cost_plus_one=TRUE
+*._union_rewrite_for_gs='YES_GSET_MVS'
+*._unnest_subquery=TRUE
+*._use_column_stats_for_function=TRUE
+*._xt_sampling_scan_granules='ON'
+*.audit_trail='DB'
+*.cluster_database=TRUE
+*.compatible='19.8.0.0.0'
+*.connection_brokers='((TYPE=DEDICATED)(BROKERS=1))','((TYPE=EMON)(BROKERS=1))'# connection_brokers default value
+*.control_files='+CNTL1/REPODR/CONTROLFILE/current.258.1233653845','+CNTL2/REPODR/CONTROLFILE/current.261.1233653845','+CNTL3/REPODR/CONTROLFILE/current.261.1233653845'#Restore Controlfile
+*.core_dump_dest='/u01/app/oracle/diag/rdbms/repodr/REPODR1/cdump'
+*.cpu_count=48
+*.cpu_min_count='48'
+*.db_block_size=8192
+*.db_create_file_dest='+DATA'
+*.db_file_name_convert='REPODB','REPODR'
+*.db_name='REPOSDB'
+*.db_recovery_file_dest_size=75G
+*.db_recovery_file_dest='+ARCHIVE'
+*.db_unique_name='REPODR'
+*.dg_broker_config_file1='+DATA/REPODR/dr1repodr.dat'
+*.dg_broker_config_file2='+DATA/REPODR/dr2repodr.dat'
+*.dg_broker_start=TRUE
+*.diagnostic_dest='/u01/app/oracle'
+*.fal_client='REPODR'
+*.fal_server='REPODB'
+*.instance_number=1
+REPODR2.instance_number=2
+REPODR1.instance_number=1
+*.job_queue_processes=640
+REPODR1.local_listener='(ADDRESS=(PROTOCOL=TCP)(HOST=10.200.129.146)(PORT=1521))'
+*.log_archive_config='dg_config=(REPODB,REPODR)'
+*.log_archive_dest_1='LOCATION=USE_DB_RECOVERY_FILE_DEST'
+*.log_archive_dest_2=''
+*.log_archive_dest_state_1='ENABLE'
+*.log_archive_dest_state_2='ENABLE'
+*.log_buffer=23244K# log buffer update
+*.log_file_name_convert='REPODB','REPODR'
+*.nls_language='AMERICAN'
+*.nls_territory='AMERICA'
+*.open_cursors=300
+*.optimizer_mode='ALL_ROWS'
+*.pga_aggregate_target=634M
+*.plsql_warnings='DISABLE:ALL'# PL/SQL warnings at init.ora
+*.processes=2560
+*.query_rewrite_enabled='TRUE'
+*.remote_listener='insis-dr-scan:1521'
+*.remote_login_passwordfile='EXCLUSIVE'
+*.remote_os_authent=FALSE
+*.result_cache_max_size=9760K
+*.sga_max_size=2202009600
+*.sga_target=2202009600
+*.standby_file_management='AUTO'
+*.tde_configuration='KEYSTORE_CONFIGURATION=FILE'
+*.thread=1
+REPODR2.thread=2
+REPODR1.thread=1
+*.undo_tablespace='UNDOTBS1'
+REPODR2.undo_tablespace='UNDOTBS2'
+REPODR1.undo_tablespace='UNDOTBS1'
+*.wallet_root='+DATA/REPODR/wallet/'
+[oracle@e75lrl1054 tmp]$
+
+
+SQL> alter system set fal_server='REPODB' scope=both sid='*';
+ 
+System altered.
+ 
+SQL> alter system set fal_client='REPODR' scope=both sid='*';
+ 
+System altered.
+
+
+startup nomount pfile='/u01/app/oracle/rdbms19c/dbs/initINSDRSTD1.ora';
+
+
+
+--- Create SPFILE in ASM
+create spfile='+DATA' from pfile='/u01/app/oracle/rdbms19c/dbs/initINSDRSTD1.ora';
+
+
+vi /u01/app/oracle/rdbms19c/dbs/initINSDRSTD1.ora 
+
+spfile='+DATA/INSDRSTD/PARAMETERFILE/spfile.262.1139321089'
+
+
+--- copy the wallet file from souce to target (in ASM location)
+
+SET LINESIZE 200
+SET PAGESIZE 100
+COL WRL_TYPE FOR A20
+COL WRL_PARAMETER FOR A30
+COL STATUS FOR A30
+COL WALLET_TYPE FOR A20
+COL WALLET_OR_KEYSTORE FOR A9
+COL FULLY_BACKED_UP FOR A9
+SELECT 
+    WRL_TYPE, 
+    WRL_PARAMETER, 
+    STATUS, 
+    WALLET_TYPE, 
+    FULLY_BACKED_UP, 
+    CON_ID 
+FROM 
+    V$ENCRYPTION_WALLET;
+
+
+--- copy the pwd file also from souce to target (in ASM location) 
+
+e75lrl1055> asmcmd pwcopy --dbuniuename INSISDR /tmp/orapwINSISDR +DATA/INSISDR/PASSWORD/orapwINISDR -f
+
+--Take BACKUP
+
+Need to put the rman backup script inside the (Backup1805_Fullbackup.rman )
+
+Then need to edit the (Backup1805_Fullbackup.ksh ) script like below
+
+chmod a+x Backup1805_Fullbackup.ksh
+
+nohup ./Backup1805_Fullbackup.ksh &
+
+
+
+[oracle@e75lrl1579 REPOSDB_Backup]$ cat Backup1805_Fullbackup.rman
+connect target /
+run
+{
+  # Allocate channels with a clear FULL backup naming convention
+  allocate channel ch1 device type disk format '/backup/REPOSDB_Backup/FULL_%d_%p_%T_%s.rbkp';
+  allocate channel ch2 device type disk format '/backup/REPOSDB_Backup/FULL_%d_%p_%T_%s.rbkp';
+  allocate channel ch3 device type disk format '/backup/REPOSDB_Backup/FULL_%d_%p_%T_%s.rbkp';
+
+  # Correctly assign the 1GB piece limit to each individual channel
+  setlimit channel ch1 kbytes 1000000;
+  setlimit channel ch2 kbytes 1000000;
+  setlimit channel ch3 kbytes 1000000;
+
+  # Execute a full backup that includes the necessary archivelogs
+  BACKUP AS COMPRESSED BACKUPSET
+    DATABASE
+    PLUS ARCHIVELOG;
+
+  # Back up the control file and the initialization parameter file (SPFILE)
+  backup current controlfile format '/backup/REPOSBD_Backup/ctl_%d_%s_%p' tag 'CONTROL_BACKUP';
+  backup spfile format '/backup/REPOSBD_Backup/spfile_%d_%s_%p' tag 'SPFILE_BACKUP';
+}
+
+[oracle@e75lrl1579 REPOSDB_Backup]$ cat Backup1805_Fullbackup.ksh
+#!/bin/ksh
+export ORCALE_HOME=/u01/app/oracle/rdbms19c
+$ORACLE_HOME/bin/rman debug all trace=Backup1805_Fullbackup.trc cmdfile Backup1805_Fullbackup.rman > full_backup.out
+[oracle@e75lrl1579 REPOSDB_Backup]$
+
+
+
+==================== Register the database with clusterware services:
+
+srvctl add database \
+-db REPODR \
+-dbtype RAC \
+-oraclehome /u01/app/oracle/rdbms19c \
+-spfile +DATA/REPODR/PARAMETERFILE/spfile.652.1233649475 \
+-pwfile +DATA/REPODR/PASSWORD/pwdrepodr \
+-role PHYSICAL_STANDBY \
+-startoption MOUNT \
+-stopoption IMMEDIATE \
+-diskgroup DATA,CNTL1,CNTL2,CNTL3,ARCHIVE \
+-dbname REPOSDB
+
+
+srvctl add database -db REPODR -oraclehome /u01/app/oracle/rdbms19c -spfile '+DATA/REPODR/PARAMETERFILE/spfile.652.1233649475' 
+srvctl modify database -d REPODR -role PHYSICAL_STANDBY
+srvctl modify database -d REPODR -p '+DATA/INSDRSTD/PARAMETERFILE/spfile.262.1139321089'
+srvctl modify database -d REPODR -pwfile '+DATA/REPODR/PASSWORD/pwdrepodr'
+
+================= Register the instances with clusterware services:
+
+srvctl add instance -db REPODR -instance REPODR1 -node e75lrl1054
+srvctl add instance -db REPODR -instance REPODR2 -node e75lrl1055
+
+srvctl modify database -db REPODR -startoption "read only"
+
+alter system set cluster_database=TRUE scope=spfile;
+
+srvctl status database -d REPODR
+srvctl stop database -d REPODR
+srvctl start database -d REPODR -startoption mount
+srvctl status database -d REPODR
+srvctl config database -d REPODR
+
+srvctl modify database -db REPODR -startoption "read only"
+
+
+=====================================================================
+Dataguard broker configuration
+===========================================
+
+
+step -1 : 
+Need to remove the existing configuartion from DGMFRL
+
+DGMGRL> REMOVE CONFIGURATION;
+
+step-2 :
+
+
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE1='+DATA/INSPRIM/dr1INSPRIM.dat' SCOPE=BOTH sid='*';    --primary
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE2='+DATA/INSPRIM/dr2INSPRIM.dat' SCOPE=BOTH sid='*';    --primary
+
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE1='+DATA/REPODR/dr1repodr.dat' SCOPE=BOTH sid='*';  --standby
+SQL> ALTER SYSTEM SET DG_BROKER_CONFIG_FILE2='+DATA/REPODR/dr2repodr.dat' SCOPE=BOTH sid='*';  --standby
+
+ALTER SYSTEM SET dg_broker_start=TRUE scope=both;  --primary
+ALTER SYSTEM SET dg_broker_start=true scope=both;  --standby
+
+After set this dg_broker_start value to true only you can see the valuses in ASMCMD prompt.
+
+
+
+SQL> show parameter DG_BROKER_CONFIG_FILE1
+ 
+NAME                                 TYPE        VALUE
+
+------------------------------------ ----------- ------------------------------
+
+dg_broker_config_file1               string      +DATA/REPODR/dr1repodr.dat
+
+SQL> show parameter DG_BROKER_CONFIG_FILE2
+ 
+NAME                                 TYPE        VALUE
+
+------------------------------------ ----------- ------------------------------
+
+dg_broker_config_file2               string      +DATA/REPODR/dr2repodr.dat
+
+ 
+
+--connect dgmgrl (IN PRIMARY ONLY need to add for both primary and standby information)
+dgmgrl sys/Rep123dbProd@REPODR as sysdba
+
+--In primary need to add 
+
+DGMGRL>CREATE CONFIGURATION 'reposdb_dg_config' AS PRIMARY DATABASE IS 'REPODB' CONNECT IDENTIFIER IS 'REPODB';
+
+--add the standby database
+DGMGRL>ADD DATABASE 'REPODR' AS CONNECT IDENTIFIER IS 'REPODR' MAINTAINED AS PHYSICAL;
+
+DGMGRL> show configuration
+
+DGMGRL> ENABLE CONFIGURATION;
+
+DGMGRL> VALIDATE DATABASE 'REPODB';
+
+DGMGRL> VALIDATE DATABASE 'REPODR';
+
+DGMGRL> SHOW DATABASE 'REPODR' 'LogXptMode';
+
+DGMGRL> SHOW DATABASE 'REPODB' StatusReport;
+
+DGMGRL> show configuration
+
+Configuration - reposdb_dg_config
+
+  Protection Mode: MaxPerformance
+  Members:
+  REPODB - Primary database
+    Error: ORA-16778: redo transport error for one or more members
+
+    REPODR - Physical standby database
+      Warning: ORA-16854: apply lag could not be determined
+
+Fast-Start Failover:  Disabled
+
+Configuration Status:
+ERROR   (status updated 53 second ago)
+
+DGMGRL> EDIT DATABASE 'REPODB' SET STATE='TRANSPORT-OFF';
+Succeeded.
+DGMGRL> EDIT DATABASE 'REPODB' SET STATE='TRANSPORT-ON';
+Succeeded.
+
+DGMGRL> EDIT DATABASE 'REPODB' SET STATE='TRANSPORT-OFF';
+
+DGMGRL> SHOW DATABASE 'REPODB' 'LogXptStatus';

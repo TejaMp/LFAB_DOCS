@@ -1,0 +1,197 @@
+++++++++++++++++++++++Data Guard Switchover Checklist +++++++++++++++++++++++++++++
+
+1.Pre-Switchover Checks
+A. Verify Data Guard Broker Configuration
+
+-- In DGMGRL:
+show configuration;
+show database <primary>;
+show database ESKADB;
+show database <standby>;
+show database INSISDR;
+show database 'ESAKDB' logxptstatus;
+show database 'ESAKDB' inconsistentlogxptprops;
+show database verbose ESAKDB;
+show database verbose INSISDR;
+validate database ESAKDB;
+validate database INSISDR;
+
+B. Check Dataguard Log Gaps and Database Roles
+
+-- On PRIMARY DATABASE:
+SELECT status, gap_status 
+FROM v$archive_dest_status 
+WHERE dest_id =2;  -- No log file gap expected
+
+SELECT name, log_mode, controlfile_type, open_mode, database_role, switchover_status 
+FROM gv$database;
+
+2.Tempfiles Consistency on Both Databases
+
+COL name FOR a60
+SELECT ts#, name, status FROM v$tempfile;
+
+-- Run on both primary and standby. Tempfile count, tablespace name, and status should match.
+
+(B) Detailed Tempfile and Tablespace Names
+
+SELECT tf.name filename, bytes, ts.name tablespace
+  FROM v$tempfile tf, v$tablespace ts
+ WHERE tf.ts# = ts.ts#;
+ 
+3.Archive Log Sequence Synchronization
+
+(A) On Primary: Last Sequence Generated
+
+SELECT thread#, MAX(sequence#) "Last Primary Seq Generated"
+  FROM gv$archived_log val, gv$database vdb
+ WHERE val.resetlogs_change# = vdb.resetlogs_change#
+ GROUP BY thread#
+ ORDER BY 1;
+ 
+(B) On Standby: Last Sequence Received
+ 
+ SELECT thread#, MAX(sequence#) "Last Standby Seq Received"
+  FROM gv$archived_log val, gv$database vdb
+ WHERE val.resetlogs_change# = vdb.resetlogs_change#
+ GROUP BY thread#
+ ORDER BY 1;
+ 
+ (C) On Standby: Last Sequence Applied
+ 
+ SELECT thread#, MAX(sequence#) "Last Standby Seq Applied"
+  FROM gv$archived_log val, gv$database vdb
+ WHERE val.resetlogs_change# = vdb.resetlogs_change#
+   AND val.applied IN ('YES','IN-MEMORY')
+ GROUP BY thread#
+ ORDER BY 1;
+ 
+4. Check for Offline Datafiles (on Primary)
+ 
+ SELECT name FROM v$datafile WHERE status = 'OFFLINE';
+
+-- Should return no rows! All datafiles must be ONLINE for switchover.
+
+5. Primary Database: Clear Blocking Scheduler Jobs
+
+Before a switchover, it’s best practice to temporarily disable or stop any scheduled jobs 
+(other than essential Oracle 'SYS' jobs) to prevent conflicts or resource contention during the switchover operation.
+
+Step 1: Check the Job Queue Parameter
+
+(This parameter controls the maximum number of jobs that can run concurrently in the database. 
+Temporarily set it to 0 to prevent new jobs from starting.)
+
+SHOW PARAMETER job_queue_processes;
+ALTER SYSTEM SET job_queue_processes = 0 SCOPE=BOTH;
+
+=> This stops the scheduler from starting new jobs.
+=> Remember to restore this setting after the switchover!
+
+Step 2: List All Active Scheduler Jobs (Excluding SYS)
+
+COL owner FOR a20;
+COL job_name FOR a30;
+COL start_date FOR a50;
+COL end_date FOR a20;
+
+SELECT owner, job_name, start_date, end_date, enabled 
+FROM dba_scheduler_jobs 
+WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+Step 3: Generate Disable Statements for Each Job
+
+SELECT 
+  'EXECUTE DBMS_SCHEDULER.DISABLE(''' || owner || '.' || job_name || ''');' 
+FROM dba_scheduler_jobs 
+WHERE enabled = 'TRUE' AND owner <> 'SYS';
+
+Step 4: Manually Stop or Disable Jobs if Needed
+(If disabling doesn't work for certain jobs (e.g., due to running chains or complex jobs), stop them manually)
+
+BEGIN
+  DBMS_SCHEDULER.STOP_JOB('INSIS_CUST.RUN_CHAIN$UDP_CHAI3578'); 
+END;
+/
+
+Notes : Always record jobs that were disabled or stopped so they can be re-enabled or restarted after switchover
+
+Don't forget to set job_queue_processes back to its original value.
+
+6. Shutting Down Extra RAC Instances Before Switchover
+
+( RAC setup, switchover operations should be performed with only one instance running on both the primary and standby databases)
+
+Steps
+(A)
+-- For instance 2 (from its server or via srvctl if using Grid Infrastructure):
+srvctl stop instance -d <db_unique_name> -i <instance2_name>
+
+-- OR using SQL*Plus (locally on node2):
+sqlplus / as sysdba
+SHUTDOWN IMMEDIATE;
+
+(B) On the Standby Database:
+
+srvctl stop instance -d <db_unique_name> -i <standby_instance2_name>
+
+-- OR use SQL*Plus on the standby node:
+sqlplus / as sysdba
+SHUTDOWN IMMEDIATE;
+
+
++++++++++++++++++++++++++++++++++++Switchover Tuning Steps ++++++++++++++++++++++++++++++++
+
+
+1. Disable Standby Apply Delay (delaymins)
+
+(For a switchover, this delay can slow things down, so set the delay to 0 temporarily)
+
+DGMGRL> EDIT DATABASE 'INSISDR' SET PROPERTY delaymins = 0;
+
+DGMGRL> SHOW DATABASE 'INSISDR' delaymins;
+
+2. Enable Data Guard Broker Tracing
+(want to capture detailed diagnostics during the switchover, increase the Data Guard Broker trace level) 
+
+DGMGRL> connect sys@ESAKDB
+
+DGMGRL> EDIT CONFIGURATION SET PROPERTY traceLevel = 'SUPPORT';
+
+DGMGRL> SHOW CONFIGURATION;
+or DGMGRL> SHOW CONFIGURATION PROPERTY traceLevel;
+
+3. Enable Log Archive Trace (for RAC/Advanced Diagnostics)
+
+(RAC database: Maximum level of internal Oracle log archive debug information, helpful for Oracle Support or in-depth troubleshooting)
+
+dgmgrl
+DGMGRL> connect sys@ESAKDB
+
+Set LogArchiveTrace on all instances for Primary:
+DGMGRL> EDIT INSTANCE * ON DATABASE 'ESAKDB' SET PROPERTY LogArchiveTrace = 8191;
+
+ Set LogArchiveTrace on all instances for Standby:
+ DGMGRL> EDIT INSTANCE * ON DATABASE 'INSISDR' SET PROPERTY LogArchiveTrace = 8191;
+To verify:
+
+DGMGRL> SHOW INSTANCE * ON DATABASE 'ESAKDB' LogArchiveTrace;
+DGMGRL> SHOW INSTANCE * ON DATABASE 'INSISDR' LogArchiveTrace;
+
+
+
+++++++++++++++++++++++++++++ Perform Switchover ++++++++++++++++++++++++++++
+
+Performing a Data Guard Switchover using DGMGRL
+
+$ dgmgrl
+DGMGRL> connect sys@ESAKDB
+
+DGMGRL> switchover to INSISDR
+
+=> INSISDR is the name of the standby database in our Data Guard Broker configuration.
+=> The broker coordinates the switch: primary becomes standby and vice versa.
+
++++++++++++++++++++++++++++++++ POST SWITCHOVER ++++++++++++++++++++++++++++++
+
+select name,log_mode,CONTROLFILE_type,open_mode,database_role,switchover_status from gv$database;
